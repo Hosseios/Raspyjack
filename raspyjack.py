@@ -771,6 +771,19 @@ def ShowInfo():
                     "Discord:",
                     "  ❌ No webhook"
                 ])
+            
+            # Add Flask webhook status
+            flask_webhook_url = get_flask_webhook()
+            if flask_webhook_url:
+                info_lines.extend([
+                    "Flask:",
+                    "  ✅ Webhook configured"
+                ])
+            else:
+                info_lines.extend([
+                    "Flask:",
+                    "  ❌ No webhook"
+                ])
         else:
             # Not connected
             info_lines = [
@@ -954,6 +967,22 @@ def get_discord_webhook():
         print(f"Error reading Discord webhook: {e}")
     return None
 
+def get_flask_webhook():
+    """Read Flask webhook URL from configuration file."""
+    webhook_file = "/root/Raspyjack/flask_webhook.txt"
+    try:
+        if os.path.exists(webhook_file):
+            with open(webhook_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip comments and empty lines
+                    if line and not line.startswith('#') and not line.startswith('//'):
+                        if line.startswith('http://') or line.startswith('https://'):
+                            return line
+    except Exception as e:
+        print(f"Error reading Flask webhook: {e}")
+    return None
+
 def send_to_discord(scan_label: str, file_path: str, target_network: str, interface: str):
     """Send Nmap scan results as a file attachment to Discord webhook."""
     webhook_url = get_discord_webhook()
@@ -1011,6 +1040,63 @@ def send_to_discord(scan_label: str, file_path: str, target_network: str, interf
     except Exception as e:
         print(f"❌ Error sending Discord webhook with file: {e}")
 
+def send_scan_to_flask(scan_label: str, file_path: str, target_network: str, interface: str):
+    """Send Nmap scan results as JSON to Flask webhook for Ollama analysis."""
+    webhook_url = get_flask_webhook()
+    if not webhook_url:
+        print("Flask webhook not configured - skipping Flask notification")
+        return
+    
+    try:
+        # Check if file exists and read its content
+        if not os.path.exists(file_path):
+            print(f"Scan file not found: {file_path}")
+            return
+            
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            print("Scan file is empty")
+            return
+        
+        # Read the scan content as text
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            scan_content = f.read()
+        
+        # Prepare JSON payload
+        payload = {
+            "scan_label": scan_label,
+            "target_network": target_network,
+            "interface": interface,
+            "timestamp": datetime.now().isoformat(),
+            "scan_content": scan_content,
+            "file_size": file_size,
+            "filename": os.path.basename(file_path)
+        }
+        
+        # Send to Flask webhook
+        response = requests.post(webhook_url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            print("✅ Flask webhook sent successfully")
+            try:
+                # Try to get response from Flask (if it returns analysis results)
+                response_data = response.json()
+                if 'message' in response_data:
+                    print(f"Flask response: {response_data['message']}")
+            except:
+                pass
+        else:
+            print(f"❌ Flask webhook failed: {response.status_code}")
+            if response.text:
+                print(f"Error details: {response.text[:100]}...")
+            
+    except requests.exceptions.ConnectionError:
+        print("❌ Flask webhook connection failed - server may be offline")
+    except requests.exceptions.Timeout:
+        print("❌ Flask webhook timeout - server took too long to respond")
+    except Exception as e:
+        print(f"❌ Error sending Flask webhook: {e}")
+
 def run_scan(label: str, nmap_args: list[str]):
     Dialog_info(f"      {label}\n        Running\n      wait please...", wait=True)
 
@@ -1038,17 +1124,20 @@ def run_scan(label: str, nmap_args: list[str]):
     subprocess.run(cmd)
     subprocess.run(["sed", "-i", "s/Nmap scan report for //g", path])
 
-    # Send scan results to Discord (non-blocking)
-    def send_results_to_discord():
+    # Send scan results to Discord and Flask (non-blocking)
+    def send_results_to_services():
         try:
             if os.path.exists(path):
-                # Send the file directly instead of reading content
+                # Send to Discord (existing functionality)
                 send_to_discord(label, path, ip_with_mask, interface)
+                
+                # Send to Flask for Ollama analysis (new functionality)
+                send_scan_to_flask(label, path, ip_with_mask, interface)
         except Exception as e:
-            print(f"Error sending scan results to Discord: {e}")
+            print(f"Error sending scan results to services: {e}")
     
-    # Send to Discord in background thread
-    threading.Thread(target=send_results_to_discord, daemon=True).start()
+    # Send to services in background thread
+    threading.Thread(target=send_results_to_services, daemon=True).start()
 
     Dialog_info(f"      {label}\n      Finished !!!\n   Interface: {interface}", wait=True)
     time.sleep(2)

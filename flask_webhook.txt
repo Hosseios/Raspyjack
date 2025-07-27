@@ -1,0 +1,18 @@
+# Flask Webhook Configuration
+# 
+# To set up Flask webhook notifications for Nmap scan analysis:
+# 
+# 1. Start your Flask server on your Windows PC:
+#    - Run your Flask app with Ollama integration
+#    - Ensure it's accessible from your Raspberry Pi network
+# 
+# 2. Replace the URL below with your actual Flask webhook URL:
+#    http://YOUR_WINDOWS_PC_IP:5000/upload-scan
+# 
+# 3. Save this file and restart RaspyJack
+# 
+# Example webhook URL (replace with your actual URL):
+# http://192.168.1.100:5000/upload-scan
+
+# Your Flask webhook URL goes here (uncomment and replace):
+# http://192.168.1.100:5000/upload-scan 
