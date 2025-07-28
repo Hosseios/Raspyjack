@@ -1,0 +1,72 @@
+{
+  "cyberpunk": {
+    "background": "rgb(15, 15, 26)",
+    "text": "rgb(0, 255, 234)",
+    "highlightText": "rgb(255, 0, 200)",
+    "highlightBg": "rgb(85, 0, 255)",
+    "border": "rgb(0, 255, 234)"
+  },
+  "hacker": {
+    "background": "rgb(0, 0, 0)",
+    "text": "rgb(0, 255, 0)",
+    "highlightText": "rgb(0, 0, 0)",
+    "highlightBg": "rgb(0, 255, 0)",
+    "border": "rgb(0, 255, 0)"
+  },
+  "frost": {
+    "background": "rgb(26, 31, 43)",
+    "text": "rgb(200, 241, 255)",
+    "highlightText": "rgb(10, 10, 10)",
+    "highlightBg": "rgb(0, 200, 255)",
+    "border": "rgb(0, 200, 255)"
+  },
+  "matrix": {
+    "background": "rgb(10, 10, 10)",
+    "text": "rgb(255, 44, 44)",
+    "highlightText": "rgb(0, 0, 0)",
+    "highlightBg": "rgb(255, 44, 44)",
+    "border": "rgb(255, 44, 44)"
+  },
+  "retro": {
+    "background": "rgb(43, 26, 18)",
+    "text": "rgb(255, 215, 0)",
+    "highlightText": "rgb(43, 26, 18)",
+    "highlightBg": "rgb(255, 215, 0)",
+    "border": "rgb(166, 124, 0)"
+  },
+  "spacedust": {
+    "background": "rgb(10, 5, 20)",
+    "text": "rgb(180, 180, 255)",
+    "highlightText": "rgb(10, 5, 20)",
+    "highlightBg": "rgb(100, 90, 255)",
+    "border": "rgb(180, 180, 255)"
+  },
+  "toxic": {
+    "background": "rgb(10, 20, 5)",
+    "text": "rgb(140, 255, 80)",
+    "highlightText": "rgb(0, 0, 0)",
+    "highlightBg": "rgb(80, 255, 120)",
+    "border": "rgb(140, 255, 80)"
+  },
+  "synthwave": {
+    "background": "rgb(30, 0, 60)",
+    "text": "rgb(255, 80, 200)",
+    "highlightText": "rgb(30, 0, 60)",
+    "highlightBg": "rgb(0, 255, 255)",
+    "border": "rgb(255, 80, 200)"
+  },
+  "noir": {
+    "background": "rgb(25, 25, 25)",
+    "text": "rgb(230, 230, 230)",
+    "highlightText": "rgb(25, 25, 25)",
+    "highlightBg": "rgb(230, 230, 230)",
+    "border": "rgb(130, 130, 130)"
+  },
+  "dragon": {
+    "background": "rgb(20, 5, 5)",
+    "text": "rgb(255, 100, 100)",
+    "highlightText": "rgb(0, 0, 0)",
+    "highlightBg": "rgb(200, 0, 0)",
+    "border": "rgb(255, 0, 0)"
+  }
+} 

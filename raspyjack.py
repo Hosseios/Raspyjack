@@ -1608,6 +1608,206 @@ def list_payloads():
         os.makedirs(default.payload_path, exist_ok=True)
         return []
 
+# Theme management functions
+def load_themes():
+    """Load themes from themes.json file."""
+    themes_file = default.install_path + "themes.json"
+    if os.path.exists(themes_file):
+        try:
+            with open(themes_file, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_themes(themes):
+    """Save themes to themes.json file."""
+    themes_file = default.install_path + "themes.json"
+    try:
+        with open(themes_file, 'w') as f:
+            json.dump(themes, f, indent=2)
+        return True
+    except:
+        return False
+
+def apply_theme(theme_name):
+    """Apply a theme by name."""
+    themes = load_themes()
+    if theme_name not in themes:
+        return False
+    
+    theme = themes[theme_name]
+    
+    # Convert RGB values to hex for the template class
+    def rgb_to_hex(rgb_str):
+        if rgb_str.startswith('rgb('):
+            # Extract RGB values
+            rgb_values = rgb_str[4:-1].split(',')
+            r, g, b = [int(x.strip()) for x in rgb_values]
+            return f"#{r:02x}{g:02x}{b:02x}"
+        return rgb_str
+    
+    # Apply theme colors
+    color.background = rgb_to_hex(theme.get('background', color.background))
+    color.text = rgb_to_hex(theme.get('text', color.text))
+    color.selected_text = rgb_to_hex(theme.get('highlightText', color.selected_text))
+    color.select = rgb_to_hex(theme.get('highlightBg', color.select))
+    color.border = rgb_to_hex(theme.get('border', color.border))
+    
+    # Set gamepad colors to match theme
+    color.gamepad = color.select
+    color.gamepad_fill = color.selected_text
+    
+    # Redraw border to apply new colors
+    color.DrawBorder()
+    
+    return True
+
+def list_themes():
+    """List all available themes."""
+    themes = load_themes()
+    return list(themes.keys())
+
+def theme_selector():
+    """Show theme selection menu."""
+    themes = list_themes()
+    if not themes:
+        Dialog_info("No themes found!\nUpload themes.json", wait=True)
+        return
+    
+    current_theme = 0
+    while True:
+        color.DrawMenuBackground()
+        
+        # Show current theme name
+        theme_name = themes[current_theme]
+        draw.text((default.start_text[0], default.start_text[1]), 
+                  f"Theme: {theme_name}", fill=color.text)
+        
+        # Show preview of theme
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 2), 
+                  "Preview:", fill=color.text)
+        
+        # Apply theme temporarily for preview
+        original_colors = {
+            'background': color.background,
+            'text': color.text,
+            'selected_text': color.selected_text,
+            'select': color.select,
+            'border': color.border,
+            'gamepad': color.gamepad,
+            'gamepad_fill': color.gamepad_fill
+        }
+        
+        apply_theme(theme_name)
+        
+        # Show navigation instructions
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 4), 
+                  "UP/DOWN: Browse", fill=color.text)
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 5), 
+                  "LEFT: Previous", fill=color.text)
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 6), 
+                  "RIGHT: Next", fill=color.text)
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 7), 
+                  "PRESS: Apply", fill=color.text)
+        
+        # Restore original colors
+        for key, value in original_colors.items():
+            setattr(color, key, value)
+        color.DrawBorder()
+        
+        button = getButton()
+        if button == "KEY_UP_PIN":
+            current_theme = (current_theme - 1) % len(themes)
+        elif button == "KEY_DOWN_PIN":
+            current_theme = (current_theme + 1) % len(themes)
+        elif button == "KEY_LEFT_PIN":
+            current_theme = (current_theme - 1) % len(themes)
+        elif button == "KEY_RIGHT_PIN":
+            current_theme = (current_theme + 1) % len(themes)
+        elif button == "KEY_PRESS_PIN" or button == "KEY1_PIN":
+            # Apply the selected theme
+            if apply_theme(theme_name):
+                Dialog_info(f"Theme '{theme_name}'\napplied!", wait=True)
+                SaveConfig()  # Save the applied theme
+            else:
+                Dialog_info("Failed to apply\ntheme!", wait=True)
+            break
+        elif button == "KEY2_PIN" or button == "KEY3_PIN":
+            break
+
+def upload_themes():
+    """Allow user to upload a new themes.json file."""
+    Dialog_info("Upload themes.json\nto /root/Raspyjack/", wait=True)
+    
+    themes_file = default.install_path + "themes.json"
+    if os.path.exists(themes_file):
+        themes = load_themes()
+        theme_count = len(themes)
+        Dialog_info(f"Found {theme_count}\nthemes loaded", wait=True)
+    else:
+        Dialog_info("No themes.json\nfound", wait=True)
+
+def export_current_theme():
+    """Export current colors as a theme."""
+    themes = load_themes()
+    
+    # Convert hex to RGB for export
+    def hex_to_rgb(hex_color):
+        if hex_color.startswith('#'):
+            hex_color = hex_color[1:]
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f"rgb({r}, {g}, {b})"
+        return hex_color
+    
+    current_theme = {
+        "background": hex_to_rgb(color.background),
+        "text": hex_to_rgb(color.text),
+        "highlightText": hex_to_rgb(color.selected_text),
+        "highlightBg": hex_to_rgb(color.select),
+        "border": hex_to_rgb(color.border)
+    }
+    
+    # Generate unique name
+    theme_name = f"custom_{int(time.time())}"
+    themes[theme_name] = current_theme
+    
+    if save_themes(themes):
+        Dialog_info(f"Theme saved as\n'{theme_name}'", wait=True)
+    else:
+        Dialog_info("Failed to save\ntheme!", wait=True)
+
+def detect_current_theme():
+    """Detect which theme matches the current colors."""
+    themes = load_themes()
+    
+    # Convert current hex colors to RGB for comparison
+    def hex_to_rgb(hex_color):
+        if hex_color.startswith('#'):
+            hex_color = hex_color[1:]
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f"rgb({r}, {g}, {b})"
+        return hex_color
+    
+    current_colors = {
+        "background": hex_to_rgb(color.background),
+        "text": hex_to_rgb(color.text),
+        "highlightText": hex_to_rgb(color.selected_text),
+        "highlightBg": hex_to_rgb(color.select),
+        "border": hex_to_rgb(color.border)
+    }
+    
+    # Find matching theme
+    for theme_name, theme_colors in themes.items():
+        if theme_colors == current_colors:
+            return theme_name
+    
+    return None
+
 # ---------------------------------------------------------------------------
 # 1)  Helper – reset GPIO *and* re-initialise the LCD
 # ---------------------------------------------------------------------------
@@ -1728,6 +1928,7 @@ class DisposableMenu:
 
         "ae": (
             [" Colors",         "aea"],
+            [" Themes",         "aet"],
             [" Refresh config", LoadConfig],
             [" Save config!",   SaveConfig]
         ),
@@ -1740,6 +1941,12 @@ class DisposableMenu:
             [" Border",              [SetColor, 1]],
             [" Gamepad border",      [SetColor, 5]],
             [" Gamepad fill",        [SetColor, 6]]
+        ),
+
+        "aet": (
+            [" Select Theme",        theme_selector],
+            [" Upload Themes",       upload_themes],
+            [" Export Current",      export_current_theme]
         ),
 
         "af": (
