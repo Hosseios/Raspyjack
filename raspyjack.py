@@ -2097,11 +2097,11 @@ def GetMenuCarousel(inlist, duplicates=False):
         main_x = 64  # Center of 128px screen
         main_y = 64  # Center vertically
         
-        # Draw huge icon in center
+        # Draw huge icon in center - FIXED: Use regular text color instead of selected_text
         icon = MENU_ICONS.get(txt, "\uf192")  # Default to dot-circle icon
         # Large font for the icon
         huge_icon_font = ImageFont.truetype('/usr/share/fonts/truetype/fontawesome/fa-solid-900.ttf', 48)
-        draw.text((main_x, main_y - 12), icon, font=huge_icon_font, fill=color.selected_text, anchor="mm")
+        draw.text((main_x, main_y - 12), icon, font=huge_icon_font, fill=color.text, anchor="mm")
         
         # Draw menu item name under the icon with custom font for carousel view
         title = txt.strip()
