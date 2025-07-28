@@ -1615,9 +1615,14 @@ def load_themes():
     if os.path.exists(themes_file):
         try:
             with open(themes_file, 'r') as f:
-                return json.load(f)
-        except:
+                themes = json.load(f)
+                print(f"Loaded {len(themes)} themes from {themes_file}")
+                return themes
+        except Exception as e:
+            print(f"Error loading themes: {e}")
             return {}
+    else:
+        print(f"Themes file not found: {themes_file}")
     return {}
 
 def save_themes(themes):
@@ -1630,7 +1635,7 @@ def save_themes(themes):
     except:
         return False
 
-def apply_theme(theme_name):
+def apply_theme(theme_name, preview_only=False):
     """Apply a theme by name."""
     themes = load_themes()
     if theme_name not in themes:
@@ -1658,8 +1663,9 @@ def apply_theme(theme_name):
     color.gamepad = color.select
     color.gamepad_fill = color.selected_text
     
-    # Redraw border to apply new colors
-    color.DrawBorder()
+    # Only redraw border if not in preview mode
+    if not preview_only:
+        color.DrawBorder()
     
     return True
 
@@ -1675,43 +1681,43 @@ def theme_selector():
         Dialog_info("No themes found!\nUpload themes.json", wait=True)
         return
     
+    # Store original colors before starting
+    original_colors = {
+        'background': color.background,
+        'text': color.text,
+        'selected_text': color.selected_text,
+        'select': color.select,
+        'border': color.border,
+        'gamepad': color.gamepad,
+        'gamepad_fill': color.gamepad_fill
+    }
+    
     current_theme = 0
     while True:
         color.DrawMenuBackground()
         
-        # Show current theme name
+        # Show current theme name (truncated if too long)
         theme_name = themes[current_theme]
+        display_name = theme_name[:12] if len(theme_name) > 12 else theme_name
         draw.text((default.start_text[0], default.start_text[1]), 
-                  f"Theme: {theme_name}", fill=color.text)
+                  f"Theme: {display_name}", fill=color.text)
         
-        # Show preview of theme
+        # Show preview indicator
         draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 2), 
                   "Preview:", fill=color.text)
         
-        # Apply theme temporarily for preview
-        original_colors = {
-            'background': color.background,
-            'text': color.text,
-            'selected_text': color.selected_text,
-            'select': color.select,
-            'border': color.border,
-            'gamepad': color.gamepad,
-            'gamepad_fill': color.gamepad_fill
-        }
+        # Apply theme temporarily for preview (without redrawing border)
+        apply_theme(theme_name, preview_only=True)
         
-        apply_theme(theme_name)
-        
-        # Show navigation instructions
+        # Show compact navigation instructions
         draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 4), 
                   "UP/DOWN: Browse", fill=color.text)
         draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 5), 
-                  "LEFT: Previous", fill=color.text)
-        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 6), 
-                  "RIGHT: Next", fill=color.text)
-        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 7), 
                   "PRESS: Apply", fill=color.text)
+        draw.text((default.start_text[0], default.start_text[1] + default.text_gap * 6), 
+                  "KEY2: Cancel", fill=color.text)
         
-        # Restore original colors
+        # Restore original colors for next iteration
         for key, value in original_colors.items():
             setattr(color, key, value)
         color.DrawBorder()
@@ -1719,21 +1725,23 @@ def theme_selector():
         button = getButton()
         if button == "KEY_UP_PIN":
             current_theme = (current_theme - 1) % len(themes)
+            time.sleep(0.1)  # Small delay to prevent rapid scrolling
         elif button == "KEY_DOWN_PIN":
             current_theme = (current_theme + 1) % len(themes)
-        elif button == "KEY_LEFT_PIN":
-            current_theme = (current_theme - 1) % len(themes)
-        elif button == "KEY_RIGHT_PIN":
-            current_theme = (current_theme + 1) % len(themes)
+            time.sleep(0.1)  # Small delay to prevent rapid scrolling
         elif button == "KEY_PRESS_PIN" or button == "KEY1_PIN":
-            # Apply the selected theme
-            if apply_theme(theme_name):
+            # Apply the selected theme permanently
+            if apply_theme(theme_name, preview_only=False):
                 Dialog_info(f"Theme '{theme_name}'\napplied!", wait=True)
                 SaveConfig()  # Save the applied theme
             else:
                 Dialog_info("Failed to apply\ntheme!", wait=True)
             break
         elif button == "KEY2_PIN" or button == "KEY3_PIN":
+            # Restore original colors when canceling
+            for key, value in original_colors.items():
+                setattr(color, key, value)
+            color.DrawBorder()
             break
 
 def upload_themes():
