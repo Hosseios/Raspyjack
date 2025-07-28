@@ -2103,11 +2103,11 @@ def GetMenuCarousel(inlist, duplicates=False):
         huge_icon_font = ImageFont.truetype('/usr/share/fonts/truetype/fontawesome/fa-solid-900.ttf', 48)
         draw.text((main_x, main_y - 12), icon, font=huge_icon_font, fill=color.text, anchor="mm")
         
-        # Draw menu item name under the icon with custom font for carousel view
+        # Draw menu item name under the icon with custom font for carousel view - FIXED: Use regular text color
         title = txt.strip()
         # Create a bigger, bolder font specifically for carousel view
         carousel_text_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 12)
-        draw.text((main_x, main_y + 28), title, font=carousel_text_font, fill=color.selected_text, anchor="mm")
+        draw.text((main_x, main_y + 28), title, font=carousel_text_font, fill=color.text, anchor="mm")
         
         # Draw navigation arrows - always show if there are multiple items
         if total > 1:
