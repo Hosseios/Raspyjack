@@ -1753,18 +1753,6 @@ def theme_selector():
             color.DrawBorder()
             break
 
-def upload_themes():
-    """Allow user to upload a new themes.json file."""
-    Dialog_info("Upload themes.json\nto /root/Raspyjack/", wait=True)
-    
-    themes_file = default.install_path + "themes.json"
-    if os.path.exists(themes_file):
-        themes = load_themes()
-        theme_count = len(themes)
-        Dialog_info(f"Found {theme_count}\nthemes loaded", wait=True)
-    else:
-        Dialog_info("No themes.json\nfound", wait=True)
-
 def export_current_theme():
     """Export current colors as a theme."""
     themes = load_themes()
@@ -1962,7 +1950,6 @@ class DisposableMenu:
 
         "aet": (
             [" Select Theme",        theme_selector],
-            [" Upload Themes",       upload_themes],
             [" Export Current",      export_current_theme]
         ),
 
