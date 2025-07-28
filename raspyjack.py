@@ -501,6 +501,15 @@ def GetMenuString(inlist, duplicates=False):
             # Toggle to grid view (only on main menu)
             toggle_view_mode()
             return (-1, "") if duplicates else ""
+        elif btn == "KEY1_PIN":
+            # In submenus, KEY1_PIN should also select the current item
+            raw = inlist[index]
+            if empty:
+                return (-2, "") if duplicates else ""
+            if duplicates:
+                idx, txt = raw.split('#', 1)
+                return int(idx), txt
+            return raw
         elif btn == "KEY_LEFT_PIN":
             return (-1, "") if duplicates else ""
 
