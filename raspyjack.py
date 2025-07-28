@@ -428,13 +428,26 @@ def GetMenuString(inlist, duplicates=False):
             txt = raw if not duplicates else raw.split('#', 1)[1]
             line = txt  # Remove cursor mark, use rectangle highlight only
             fill = color.selected_text if i == (index - offset) else color.text
-            # zone de surbrillance
+            # zone de surbrillance - FIXED: Proper vertical alignment with icons
             if i == (index - offset):
+                # Check if we're on main menu with icons
+                if m.which == "a" and MENU_ICONS.get(txt, ""):
+                    # Start selector after icon horizontally
+                    selector_x = default.start_text[0] + 14
+                    # Align selector vertically with icon (icon baseline is at y, so start selector lower)
+                    selector_y = default.start_text[1] + default.text_gap * i + 2  # +2 to align with icon
+                    selector_width = 110  # Reduced width to fit after icon
+                else:
+                    # No icon, use original positioning
+                    selector_x = default.start_text[0] - 5
+                    selector_y = default.start_text[1] + default.text_gap * i
+                    selector_width = 120
+                
                 draw.rectangle(
-                    (default.start_text[0] - 5,
-                     default.start_text[1] + default.text_gap * i,
-                     120,
-                     default.start_text[1] + default.text_gap * i + 10),
+                    (selector_x,
+                     selector_y,
+                     selector_x + selector_width,
+                     selector_y + 10),
                     fill=color.select
                 )
             
