@@ -1949,10 +1949,13 @@ def main():
     # ---- Start embedded HTTP API (FastAPI) in background --------------
     try:
         import uvicorn
-        from api.server import app as _api_app
+        from api import server as _api
+
+        # attach bridges to runtime functions (list + exec)
+        _api.attach_raspyjack(exec_payload, list_payloads)
 
         def _run_api():
-            uvicorn.run(_api_app, host="0.0.0.0", port=8000, log_level="warning")
+            uvicorn.run(_api.app, host="0.0.0.0", port=8000, log_level="warning")
 
         threading.Thread(target=_run_api, daemon=True).start()
         print("API server listening on :8000")
