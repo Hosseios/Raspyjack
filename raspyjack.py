@@ -1946,6 +1946,19 @@ def main():
     color.DrawMenuBackground()
     color.DrawBorder()
 
+    # ---- Start embedded HTTP API (FastAPI) in background --------------
+    try:
+        import uvicorn
+        from api.server import app as _api_app
+
+        def _run_api():
+            uvicorn.run(_api_app, host="0.0.0.0", port=8000, log_level="warning")
+
+        threading.Thread(target=_run_api, daemon=True).start()
+        print("API server listening on :8000")
+    except Exception as e:
+        print(f"API server not started: {e}")
+
     start_background_loops()
 
     print("Booted in %s seconds! :)" % (time.time() - start_time))
