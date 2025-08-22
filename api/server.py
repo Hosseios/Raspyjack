@@ -33,6 +33,7 @@ EXEC_PAYLOAD = None
 LIST_PAYLOADS = None
 
 _is_running = False
+_current_payload_name = None
 try:
     import threading
     _run_lock = threading.Lock()
@@ -64,7 +65,7 @@ def api_run_payload(name: str):
     if name not in allowed:
         raise HTTPException(status_code=404, detail="Payload not found")
 
-    global _is_running
+    global _is_running, _current_payload_name
     if _run_lock is None:
         # Fallback: run inline (not recommended)
         EXEC_PAYLOAD(name)
@@ -74,20 +75,31 @@ def api_run_payload(name: str):
         if _is_running:
             raise HTTPException(status_code=409, detail="Another payload is running")
         _is_running = True
+        _current_payload_name = name
 
     def _worker():
-        global _is_running
+        global _is_running, _current_payload_name
         try:
             EXEC_PAYLOAD(name)
         finally:
             if _run_lock:
                 with _run_lock:
                     _is_running = False
+                    _current_payload_name = None
             else:
                 _is_running = False
+                _current_payload_name = None
 
     threading.Thread(target=_worker, daemon=True).start()
     return {"status": "started", "name": name}
+
+
+@app.get("/api/status")
+def api_status():
+    if _run_lock:
+        with _run_lock:
+            return {"running": _is_running, "name": _current_payload_name}
+    return {"running": _is_running, "name": _current_payload_name}
 
 
 @app.get("/api/logs/tail")
