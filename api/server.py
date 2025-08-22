@@ -10,6 +10,7 @@ import os
 import time
 from typing import Iterator
 from fastapi.responses import StreamingResponse
+import subprocess
 
 app = FastAPI(title="RaspyJack API", version="0.1.0")
 
@@ -125,4 +126,44 @@ def api_tail_logs(from_start: bool = False) -> StreamingResponse:
 
     return StreamingResponse(_iter(), media_type="text/plain")
 
+
+@app.post("/api/payloads/stop")
+def api_stop_payload(name: str | None = None):
+    """Attempt to stop the running payload by killing its python process.
+    If name is not provided, uses the currently tracked payload name.
+    """
+    global _is_running, _current_payload_name
+    target = name or _current_payload_name
+    if not target:
+        raise HTTPException(status_code=409, detail="No payload is running")
+
+    if not target.endswith(".py"):
+        target = target + ".py"
+
+    pattern = f"payloads/{target}"
+
+    try:
+        # First try a graceful terminate
+        subprocess.run(["pkill", "-f", pattern], check=False)
+        time.sleep(0.4)
+        # If still running, force kill
+        if _run_lock:
+            with _run_lock:
+                still = _is_running and _current_payload_name in (target, name)
+        else:
+            still = _is_running and _current_payload_name in (target, name)
+        if still:
+            subprocess.run(["pkill", "-9", "-f", pattern], check=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stop failed: {e}")
+
+    if _run_lock:
+        with _run_lock:
+            _is_running = False
+            _current_payload_name = None
+    else:
+        _is_running = False
+        _current_payload_name = None
+
+    return {"status": "stopped"}
 
