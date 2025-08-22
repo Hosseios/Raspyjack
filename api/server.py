@@ -6,6 +6,10 @@ try:
 except Exception as e:  # FastAPI not installed on the device
     raise SystemExit(f"FastAPI import failed: {e}. Install with: pip3 install fastapi uvicorn[standard]")
 
+import os
+import time
+from typing import Iterator
+from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="RaspyJack API", version="0.1.0")
 
@@ -84,5 +88,29 @@ def api_run_payload(name: str):
 
     threading.Thread(target=_worker, daemon=True).start()
     return {"status": "started", "name": name}
+
+
+@app.get("/api/logs/tail")
+def api_tail_logs(from_start: bool = False) -> StreamingResponse:
+    """Stream loot/payload.log lines as they are written."""
+    log_path = "/root/Raspyjack/loot/payload.log"
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    open(log_path, "ab").close()  # ensure file exists
+
+    def _iter() -> Iterator[bytes]:
+        with open(log_path, "rb", buffering=0) as f:
+            if not from_start:
+                try:
+                    f.seek(0, os.SEEK_END)
+                except Exception:
+                    pass
+            while True:
+                chunk = f.readline()
+                if chunk:
+                    yield chunk
+                else:
+                    time.sleep(0.2)
+
+    return StreamingResponse(_iter(), media_type="text/plain")
 
 
