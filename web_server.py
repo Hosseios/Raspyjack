@@ -359,8 +359,8 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                     "points": points[:500],
                     "truncated": len(points) > 500,
                 },
-                "rows": rows[:500],
-                "rows_truncated": len(rows) > 500,
+                "rows": rows,
+                "rows_truncated": False,
                 "meta": {
                     "wigle_header": meta_row,
                     "columns": columns,

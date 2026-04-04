@@ -1928,12 +1928,12 @@
       return;
     }
     const rows = filteredWardrivingRows();
+    const visibleRows = rows.slice(0, 500);
     const mapData = data.map || {};
     const infoBits = [
       data && data.stats && data.stats.first_seen ? `First ${data.stats.first_seen}` : '',
       data && data.stats && data.stats.last_seen ? `Last ${data.stats.last_seen}` : '',
       data && data.stats && data.stats.uploaded ? 'Uploaded to WiGLE' : '',
-      data && data.rows_truncated ? 'Rows truncated in UI' : '',
     ].filter(Boolean);
     wardrivingVizBody.innerHTML = `
       ${renderWardrivingSummaryCards(data)}
@@ -1955,8 +1955,9 @@
       <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-800/70 flex items-center justify-between gap-3">
           <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Networks</div>
-          <div class="text-[11px] text-slate-500">${escapeHtml(String(rows.length))} visible</div>
+          <div class="text-[11px] text-slate-500">${escapeHtml(String(visibleRows.length))} visible${rows.length > visibleRows.length ? ` of ${escapeHtml(String(rows.length))} matching` : ''}</div>
         </div>
+        ${rows.length > visibleRows.length ? '<div class="px-4 py-2 border-b border-slate-800/60 text-[11px] text-slate-500">Showing the first 500 matching networks.</div>' : ''}
         <div class="overflow-auto">
           <table class="min-w-full text-xs text-left text-slate-200">
             <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-[0.16em] text-[10px]">
@@ -1971,7 +1972,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-800/60">
-              ${rows.length ? rows.map(row => `
+              ${visibleRows.length ? visibleRows.map(row => `
                 <tr class="hover:bg-slate-800/30 transition">
                   <td class="px-4 py-3 text-slate-100 font-medium">${escapeHtml(String(row.ssid || '<hidden>'))}</td>
                   <td class="px-4 py-3 text-slate-400 font-mono">${escapeHtml(String(row.bssid || ''))}</td>
