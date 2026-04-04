@@ -1770,6 +1770,78 @@
     `;
   }
 
+  function getWardrivingChannelVisual(channel){
+    const text = String(channel || 'Unknown');
+    const numeric = Number.parseInt(text, 10);
+    const palette = [
+      { icon: 'fa-tower-broadcast', tone: 'text-cyan-300' },
+      { icon: 'fa-wave-square', tone: 'text-emerald-300' },
+      { icon: 'fa-satellite-dish', tone: 'text-sky-300' },
+      { icon: 'fa-radio', tone: 'text-violet-300' },
+      { icon: 'fa-diagram-project', tone: 'text-amber-300' },
+      { icon: 'fa-sliders', tone: 'text-rose-300' },
+    ];
+    if (!Number.isFinite(numeric)) return { icon: 'fa-circle-question', tone: 'text-slate-400' };
+    return palette[Math.abs(numeric) % palette.length];
+  }
+
+  function getWardrivingSignalVisual(label){
+    const text = String(label || 'Unknown').toLowerCase();
+    if (text === 'excellent') return { icon: 'fa-signal', tone: 'text-emerald-300' };
+    if (text === 'strong') return { icon: 'fa-wifi', tone: 'text-cyan-300' };
+    if (text === 'fair') return { icon: 'fa-wave-square', tone: 'text-amber-300' };
+    if (text === 'weak') return { icon: 'fa-triangle-exclamation', tone: 'text-rose-300' };
+    return { icon: 'fa-circle-question', tone: 'text-slate-400' };
+  }
+
+  function renderWardrivingChannelsCard(items){
+    const rows = Array.isArray(items) ? items : [];
+    return `
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Channels</div>
+        <div class="space-y-2">
+          ${rows.length ? rows.map(item => {
+            const channel = String(item && item.channel || 'Unknown');
+            const visual = getWardrivingChannelVisual(channel);
+            return `
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="inline-flex items-center gap-2 min-w-0 text-slate-300 truncate">
+                  <i class="fa-solid ${visual.icon} ${visual.tone} text-[11px]"></i>
+                  <span class="truncate">${escapeHtml(channel)}</span>
+                </span>
+                <span class="text-emerald-200 font-medium shrink-0">${escapeHtml(String(item && item.count || 0))}</span>
+              </div>
+            `;
+          }).join('') : '<div class="text-xs text-slate-500">No data.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderWardrivingSignalCard(items){
+    const rows = Array.isArray(items) ? items : [];
+    return `
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Signal Quality</div>
+        <div class="space-y-2">
+          ${rows.length ? rows.map(item => {
+            const label = String(item && item.label || 'Unknown');
+            const visual = getWardrivingSignalVisual(label);
+            return `
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="inline-flex items-center gap-2 min-w-0 text-slate-300 truncate">
+                  <i class="fa-solid ${visual.icon} ${visual.tone} text-[11px]"></i>
+                  <span class="truncate">${escapeHtml(label)}</span>
+                </span>
+                <span class="text-emerald-200 font-medium shrink-0">${escapeHtml(String(item && item.count || 0))}</span>
+              </div>
+            `;
+          }).join('') : '<div class="text-xs text-slate-500">No data.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
   function renderWardrivingSecurityCard(items){
     const rows = Array.isArray(items) ? items : [];
     const sorted = rows.slice().sort((left, right) => {
@@ -1885,8 +1957,8 @@
         </section>
         <div class="space-y-4">
           ${renderWardrivingSecurityCard(data.auth_distribution)}
-          ${renderWardrivingDistCard('Channels', data.channel_distribution, 'count', 'channel')}
-          ${renderWardrivingDistCard('Signal Quality', data.signal_distribution, 'count', 'label')}
+          ${renderWardrivingChannelsCard(data.channel_distribution)}
+          ${renderWardrivingSignalCard(data.signal_distribution)}
         </div>
       </div>
       <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 overflow-hidden">
