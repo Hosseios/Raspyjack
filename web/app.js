@@ -1447,6 +1447,14 @@
     return 'Weak';
   }
 
+  function deriveWardrivingBand(channelValue){
+    const channel = safeWardrivingInt(channelValue);
+    if (channel == null || channel <= 0) return 'Others';
+    if (channel <= 14) return '2.4 GHz';
+    if (channel <= 165) return '5 GHz';
+    return 'Others';
+  }
+
   function parseCsvLine(line){
     const result = [];
     let current = '';
@@ -1484,6 +1492,7 @@
 
   function buildWardrivingDataFromRows(rows, fileMeta = {}, existingMeta = null){
     const authCounts = {};
+    const bandCounts = { '2.4 GHz': 0, '5 GHz': 0, 'Others': 0 };
     const channelCounts = {};
     const signalCounts = {};
     const uniqueBssids = new Set();
@@ -1497,6 +1506,7 @@
       if (row.bssid) uniqueBssids.add(row.bssid);
       if (row.ssid && row.ssid !== '<hidden>') uniqueSsids.add(row.ssid);
       authCounts[row.auth_mode] = (authCounts[row.auth_mode] || 0) + 1;
+      bandCounts[row.band || 'Others'] = (bandCounts[row.band || 'Others'] || 0) + 1;
       channelCounts[row.channel] = (channelCounts[row.channel] || 0) + 1;
       signalCounts[row.signal_quality] = (signalCounts[row.signal_quality] || 0) + 1;
       if (row.rssi != null) signalValues.push(row.rssi);
@@ -1522,6 +1532,9 @@
       if (leftRssi !== rightRssi) return (rightRssi ?? -200) - (leftRssi ?? -200);
       return String(left && left.ssid || '').localeCompare(String(right && right.ssid || ''));
     });
+    const openCount = authCounts.Open || 0;
+    const wepCount = authCounts.WEP || 0;
+    const riskyTotal = openCount + wepCount;
 
     return {
       file: fileMeta,
@@ -1537,9 +1550,17 @@
         first_seen: firstSeenValues.length ? firstSeenValues.sort()[0] : '',
         last_seen: firstSeenValues.length ? firstSeenValues.sort().at(-1) : '',
       },
+      risk_summary: {
+        open_count: openCount,
+        wep_count: wepCount,
+        risky_total: riskyTotal,
+        risky_percent: sortedRows.length ? Math.round((riskyTotal / sortedRows.length) * 1000) / 10 : 0,
+      },
       auth_distribution: Object.entries(authCounts)
         .map(([auth_mode, count]) => ({ auth_mode, count }))
         .sort((left, right) => Number(right.count || 0) - Number(left.count || 0) || String(left.auth_mode || '').localeCompare(String(right.auth_mode || ''))),
+      band_distribution: ['2.4 GHz', '5 GHz', 'Others']
+        .map(band => ({ band, count: bandCounts[band] || 0 })),
       channel_distribution: Object.entries(channelCounts)
         .map(([channel, count]) => ({ channel, count }))
         .sort((left, right) => Number(right.count || 0) - Number(left.count || 0) || String(left.channel || '').localeCompare(String(right.channel || '')))
@@ -1586,6 +1607,7 @@
       const firstSeen = String(read('FirstSeen') || '').trim();
       const type = String(read('Type') || '').trim() || 'WIFI';
       const authMode = normalizeWardrivingAuthMode(authModeRaw);
+      const band = deriveWardrivingBand(channel);
       rows.push({
         row: rows.length + 1,
         bssid,
@@ -1593,6 +1615,7 @@
         auth_mode: authMode,
         auth_mode_raw: authModeRaw,
         channel,
+        band,
         rssi,
         signal_quality: wardrivingSignalBucket(rssi),
         lat,
@@ -2012,6 +2035,40 @@
     `;
   }
 
+  function getWardrivingBandVisual(band){
+    const text = String(band || 'Others');
+    if (text === '2.4 GHz') return { icon: 'fa-radio', tone: 'text-emerald-300' };
+    if (text === '5 GHz') return { icon: 'fa-satellite-dish', tone: 'text-cyan-300' };
+    return { icon: 'fa-ellipsis', tone: 'text-slate-400' };
+  }
+
+  function renderWardrivingBandCard(items){
+    const rows = Array.isArray(items) ? items : [];
+    const stableRows = ['2.4 GHz', '5 GHz', 'Others'].map(band => {
+      const item = rows.find(entry => String(entry && entry.band || '') === band);
+      return { band, count: Number(item && item.count || 0) };
+    });
+    return `
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Band Breakdown</div>
+        <div class="space-y-2">
+          ${stableRows.map(item => {
+            const visual = getWardrivingBandVisual(item.band);
+            return `
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="inline-flex items-center gap-2 min-w-0 text-slate-300 truncate">
+                  <i class="fa-solid ${visual.icon} ${visual.tone} text-[11px]"></i>
+                  <span class="truncate">${escapeHtml(item.band)}</span>
+                </span>
+                <span class="text-emerald-200 font-medium shrink-0">${escapeHtml(String(item.count))}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </section>
+    `;
+  }
+
   function renderWardrivingSignalCard(items){
     const rows = Array.isArray(items) ? items : [];
     return `
@@ -2063,6 +2120,46 @@
               </div>
             `;
           }).join('') : '<div class="text-xs text-slate-500">No data.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderWardrivingRiskPanel(summary, totalNetworks){
+    const risk = summary && typeof summary === 'object' ? summary : {};
+    const riskyTotal = Number(risk.risky_total || 0);
+    const openCount = Number(risk.open_count || 0);
+    const wepCount = Number(risk.wep_count || 0);
+    const riskyPercent = Number.isFinite(Number(risk.risky_percent)) ? Number(risk.risky_percent) : 0;
+    const total = Number(totalNetworks || 0);
+    const tone = riskyTotal > 0
+      ? 'border-amber-400/30 bg-amber-500/10 text-amber-100'
+      : 'border-slate-800/70 bg-slate-900/45 text-slate-300';
+    const labelTone = riskyTotal > 0 ? 'text-amber-200/80' : 'text-slate-500';
+    const headlineTone = riskyTotal > 0 ? 'text-amber-50' : 'text-slate-200';
+    const metaTone = riskyTotal > 0 ? 'text-amber-100/80' : 'text-slate-400';
+    const pillTone = riskyTotal > 0
+      ? 'border-amber-300/25 bg-amber-500/10 text-amber-100'
+      : 'border-slate-700/60 bg-slate-950/60 text-slate-300';
+    return `
+      <section class="rounded-xl border ${tone} p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-[0.18em] ${labelTone}">Risk Snapshot</div>
+            <div class="mt-2 text-sm font-medium ${headlineTone}">${escapeHtml(String(riskyTotal))} risky networks${total ? ` of ${escapeHtml(String(total))}` : ''}</div>
+            <div class="mt-1 text-xs ${metaTone}">Open and WEP only in this pass · ${escapeHtml(`${riskyPercent.toFixed(1)}%`)}</div>
+          </div>
+          <i class="fa-solid fa-shield-halved ${riskyTotal > 0 ? 'text-amber-300' : 'text-slate-500'} text-sm"></i>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-[11px] ${pillTone}">
+            <i class="fa-solid fa-lock-open text-[10px]"></i>
+            <span>Open ${escapeHtml(String(openCount))}</span>
+          </span>
+          <span class="inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-[11px] ${pillTone}">
+            <i class="fa-solid fa-key text-[10px]"></i>
+            <span>WEP ${escapeHtml(String(wepCount))}</span>
+          </span>
         </div>
       </section>
     `;
@@ -2139,17 +2236,21 @@
       data && data.stats && data.stats.uploaded ? 'Uploaded to WiGLE' : '',
     ].filter(Boolean);
     wardrivingVizBody.innerHTML = `
-      ${renderWardrivingSummaryCards(data)}
       <div class="grid xl:grid-cols-[1.3fr_0.7fr] gap-4">
-        <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
-          <div class="flex items-center justify-between gap-2 mb-3">
-            <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Coverage Map</div>
-            <div class="text-[11px] text-slate-500">${escapeHtml(infoBits.join(' · ') || 'Map data')}</div>
-          </div>
-          ${mapData.has_coordinates ? '<div id="wardrivingMap" class="wardriving-map"></div>' : '<div class="rounded-xl border border-slate-800/70 bg-slate-950/50 px-4 py-10 text-sm text-slate-400">This capture does not contain usable GPS coordinates, so the map is unavailable.</div>'}
-          ${mapData.truncated ? '<div class="mt-2 text-[11px] text-slate-500">Showing the first 500 map points.</div>' : ''}
-        </section>
         <div class="space-y-4">
+          ${renderWardrivingSummaryCards(data)}
+          <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Coverage Map</div>
+              <div class="text-[11px] text-slate-500">${escapeHtml(infoBits.join(' · ') || 'Map data')}</div>
+            </div>
+            ${mapData.has_coordinates ? '<div id="wardrivingMap" class="wardriving-map"></div>' : '<div class="rounded-xl border border-slate-800/70 bg-slate-950/50 px-4 py-10 text-sm text-slate-400">This capture does not contain usable GPS coordinates, so the map is unavailable.</div>'}
+            ${mapData.truncated ? '<div class="mt-2 text-[11px] text-slate-500">Showing the first 500 map points.</div>' : ''}
+          </section>
+        </div>
+        <div class="space-y-4">
+          ${renderWardrivingRiskPanel(data.risk_summary, data && data.stats && data.stats.networks)}
+          ${renderWardrivingBandCard(data.band_distribution)}
           ${renderWardrivingSecurityCard(data.auth_distribution)}
           ${renderWardrivingChannelsCard(data.channel_distribution)}
           ${renderWardrivingSignalCard(data.signal_distribution)}

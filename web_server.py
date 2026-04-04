@@ -220,6 +220,17 @@ def _wardriving_signal_bucket(signal: int | None) -> str:
     return "Weak"
 
 
+def _derive_band_from_channel(channel_value) -> str:
+    channel = _safe_int(channel_value)
+    if channel is None or channel <= 0:
+        return "Others"
+    if channel <= 14:
+        return "2.4 GHz"
+    if channel <= 165:
+        return "5 GHz"
+    return "Others"
+
+
 def _compute_bounds(points: list[dict]) -> dict | None:
     if not points:
         return None
@@ -253,6 +264,7 @@ def parse_wardriving_csv_file(path: Path) -> dict:
             rows: list[dict] = []
             points: list[dict] = []
             auth_counts: dict[str, int] = {}
+            band_counts: dict[str, int] = {"2.4 GHz": 0, "5 GHz": 0, "Others": 0}
             channel_counts: dict[str, int] = {}
             signal_counts: dict[str, int] = {}
             unique_bssids: set[str] = set()
@@ -266,6 +278,7 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                 auth_mode_raw = str(raw_row.get("AuthMode") or "").strip()
                 auth_mode = _normalize_auth_mode(auth_mode_raw)
                 channel_text = str(raw_row.get("Channel") or "").strip() or "Unknown"
+                band = _derive_band_from_channel(channel_text)
                 signal = _safe_int(raw_row.get("RSSI"))
                 lat = _safe_float(raw_row.get("CurrentLatitude"))
                 lng = _safe_float(raw_row.get("CurrentLongitude"))
@@ -278,6 +291,7 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                 if ssid:
                     unique_ssids.add(ssid)
                 auth_counts[auth_mode] = auth_counts.get(auth_mode, 0) + 1
+                band_counts[band] = band_counts.get(band, 0) + 1
                 channel_counts[channel_text] = channel_counts.get(channel_text, 0) + 1
                 signal_bucket = _wardriving_signal_bucket(signal)
                 signal_counts[signal_bucket] = signal_counts.get(signal_bucket, 0) + 1
@@ -293,6 +307,7 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                     "auth_mode": auth_mode,
                     "auth_mode_raw": auth_mode_raw,
                     "channel": channel_text,
+                    "band": band,
                     "rssi": signal,
                     "signal_quality": signal_bucket,
                     "lat": lat,
@@ -325,10 +340,17 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                 {"auth_mode": key, "count": count}
                 for key, count in sorted(auth_counts.items(), key=lambda item: (-item[1], item[0]))
             ]
+            band_distribution = [
+                {"band": key, "count": band_counts.get(key, 0)}
+                for key in ("2.4 GHz", "5 GHz", "Others")
+            ]
             signal_distribution = [
                 {"label": key, "count": count}
                 for key, count in sorted(signal_counts.items(), key=lambda item: (-item[1], item[0]))
             ]
+            open_count = auth_counts.get("Open", 0)
+            wep_count = auth_counts.get("WEP", 0)
+            risky_total = open_count + wep_count
             stats = {
                 "networks": len(rows),
                 "unique_bssids": len(unique_bssids),
@@ -341,6 +363,12 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                 "first_seen": min(first_seen_values) if first_seen_values else "",
                 "last_seen": max(first_seen_values) if first_seen_values else "",
             }
+            risk_summary = {
+                "open_count": open_count,
+                "wep_count": wep_count,
+                "risky_total": risky_total,
+                "risky_percent": round((risky_total / len(rows)) * 100, 1) if rows else 0.0,
+            }
             stat_result = path.stat()
             return {
                 "file": {
@@ -349,7 +377,9 @@ def parse_wardriving_csv_file(path: Path) -> dict:
                     "mtime": int(stat_result.st_mtime),
                 },
                 "stats": stats,
+                "risk_summary": risk_summary,
                 "auth_distribution": auth_distribution,
+                "band_distribution": band_distribution,
                 "channel_distribution": top_channels,
                 "signal_distribution": signal_distribution,
                 "map": {
