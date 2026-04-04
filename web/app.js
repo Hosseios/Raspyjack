@@ -1772,17 +1772,8 @@
 
   function getWardrivingChannelVisual(channel){
     const text = String(channel || 'Unknown');
-    const numeric = Number.parseInt(text, 10);
-    const palette = [
-      { icon: 'fa-tower-broadcast', tone: 'text-cyan-300' },
-      { icon: 'fa-wave-square', tone: 'text-emerald-300' },
-      { icon: 'fa-satellite-dish', tone: 'text-sky-300' },
-      { icon: 'fa-radio', tone: 'text-violet-300' },
-      { icon: 'fa-diagram-project', tone: 'text-amber-300' },
-      { icon: 'fa-sliders', tone: 'text-rose-300' },
-    ];
-    if (!Number.isFinite(numeric)) return { icon: 'fa-circle-question', tone: 'text-slate-400' };
-    return palette[Math.abs(numeric) % palette.length];
+    if (!text || text === 'Unknown') return { icon: 'fa-circle-question', tone: 'text-slate-400' };
+    return { icon: 'fa-tower-broadcast', tone: 'text-cyan-300' };
   }
 
   function getWardrivingSignalVisual(label){
