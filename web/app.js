@@ -1418,6 +1418,209 @@
     return String(mode || '').toLowerCase() === 'open' ? 'fa-lock-open' : 'fa-lock';
   }
 
+  function safeWardrivingFloat(value){
+    const num = Number.parseFloat(String(value ?? '').trim());
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function safeWardrivingInt(value){
+    const num = Number.parseInt(String(value ?? '').trim(), 10);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function normalizeWardrivingAuthMode(rawValue){
+    const text = String(rawValue || '').toUpperCase();
+    if (text.includes('WPA3') || text.includes('SAE')) return 'WPA3';
+    if (text.includes('WPA2')) return 'WPA2';
+    if (text.includes('WPA')) return 'WPA';
+    if (text.includes('WEP')) return 'WEP';
+    if (text.includes('OPEN') || text === '[ESS]') return 'Open';
+    if (!text.trim()) return 'Unknown';
+    return text.replace(/\[/g, '').replace(/\]/g, ' ').trim() || 'Unknown';
+  }
+
+  function wardrivingSignalBucket(signal){
+    if (signal == null) return 'Unknown';
+    if (signal >= -55) return 'Excellent';
+    if (signal >= -67) return 'Strong';
+    if (signal >= -75) return 'Fair';
+    return 'Weak';
+  }
+
+  function parseCsvLine(line){
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let index = 0; index < line.length; index += 1){
+      const char = line[index];
+      if (char === '"'){
+        if (inQuotes && line[index + 1] === '"'){
+          current += '"';
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes){
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
+  function computeWardrivingBounds(points){
+    const validPoints = (Array.isArray(points) ? points : []).filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+    if (!validPoints.length) return null;
+    return {
+      min_lat: Math.min(...validPoints.map(point => point.lat)),
+      max_lat: Math.max(...validPoints.map(point => point.lat)),
+      min_lng: Math.min(...validPoints.map(point => point.lng)),
+      max_lng: Math.max(...validPoints.map(point => point.lng)),
+    };
+  }
+
+  function buildWardrivingDataFromRows(rows, fileMeta = {}, existingMeta = null){
+    const authCounts = {};
+    const channelCounts = {};
+    const signalCounts = {};
+    const uniqueBssids = new Set();
+    const uniqueSsids = new Set();
+    const signalValues = [];
+    const firstSeenValues = [];
+    const uploaded = String(fileMeta && fileMeta.name || '').startsWith('[uploaded]');
+    const points = [];
+
+    rows.forEach(row => {
+      if (row.bssid) uniqueBssids.add(row.bssid);
+      if (row.ssid && row.ssid !== '<hidden>') uniqueSsids.add(row.ssid);
+      authCounts[row.auth_mode] = (authCounts[row.auth_mode] || 0) + 1;
+      channelCounts[row.channel] = (channelCounts[row.channel] || 0) + 1;
+      signalCounts[row.signal_quality] = (signalCounts[row.signal_quality] || 0) + 1;
+      if (row.rssi != null) signalValues.push(row.rssi);
+      if (row.first_seen) firstSeenValues.push(row.first_seen);
+      if (row.has_coordinates){
+        points.push({
+          lat: row.lat,
+          lng: row.lng,
+          ssid: row.ssid,
+          bssid: row.bssid,
+          auth_mode: row.auth_mode,
+          rssi: row.rssi,
+          channel: row.channel,
+        });
+      }
+    });
+
+    const sortedRows = rows.slice().sort((left, right) => {
+      const leftRssi = left && left.rssi;
+      const rightRssi = right && right.rssi;
+      if (leftRssi == null && rightRssi != null) return 1;
+      if (leftRssi != null && rightRssi == null) return -1;
+      if (leftRssi !== rightRssi) return (rightRssi ?? -200) - (leftRssi ?? -200);
+      return String(left && left.ssid || '').localeCompare(String(right && right.ssid || ''));
+    });
+
+    return {
+      file: fileMeta,
+      stats: {
+        networks: sortedRows.length,
+        unique_bssids: uniqueBssids.size,
+        unique_ssids: uniqueSsids.size,
+        with_coordinates: points.length,
+        uploaded,
+        strongest_signal: signalValues.length ? Math.max(...signalValues) : null,
+        weakest_signal: signalValues.length ? Math.min(...signalValues) : null,
+        average_signal: signalValues.length ? Math.round((signalValues.reduce((sum, value) => sum + value, 0) / signalValues.length) * 10) / 10 : null,
+        first_seen: firstSeenValues.length ? firstSeenValues.sort()[0] : '',
+        last_seen: firstSeenValues.length ? firstSeenValues.sort().at(-1) : '',
+      },
+      auth_distribution: Object.entries(authCounts)
+        .map(([auth_mode, count]) => ({ auth_mode, count }))
+        .sort((left, right) => Number(right.count || 0) - Number(left.count || 0) || String(left.auth_mode || '').localeCompare(String(right.auth_mode || ''))),
+      channel_distribution: Object.entries(channelCounts)
+        .map(([channel, count]) => ({ channel, count }))
+        .sort((left, right) => Number(right.count || 0) - Number(left.count || 0) || String(left.channel || '').localeCompare(String(right.channel || '')))
+        .slice(0, 8),
+      signal_distribution: Object.entries(signalCounts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((left, right) => Number(right.count || 0) - Number(left.count || 0) || String(left.label || '').localeCompare(String(right.label || ''))),
+      map: {
+        has_coordinates: points.length > 0,
+        point_count: points.length,
+        bounds: computeWardrivingBounds(points),
+        points: points.slice(0, 500),
+        truncated: points.length > 500,
+      },
+      rows: sortedRows,
+      rows_truncated: false,
+      meta: existingMeta || {},
+    };
+  }
+
+  function parseWardrivingCsvText(text, fileMeta = {}, existingMeta = null){
+    const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.length);
+    if (lines.length < 2) throw new Error('CSV is empty or missing WiGLE header rows');
+    const metaRow = parseCsvLine(lines[0]);
+    if (!String(metaRow[0] || '').startsWith('WigleWifi-')){
+      throw new Error('Unsupported CSV format: expected WiGLE export');
+    }
+    const columns = parseCsvLine(lines[1]).map(value => String(value || '').trim());
+    const columnIndex = Object.fromEntries(columns.map((column, index) => [column, index]));
+    const rows = [];
+    for (let rowIndex = 2; rowIndex < lines.length; rowIndex += 1){
+      const values = parseCsvLine(lines[rowIndex]);
+      if (!values.length || values.every(value => !String(value || '').trim())) continue;
+      const read = name => values[columnIndex[name]] ?? '';
+      const bssid = String(read('MAC') || '').trim();
+      const ssidRaw = String(read('SSID') || '').trim();
+      const authModeRaw = String(read('AuthMode') || '').trim();
+      const channel = String(read('Channel') || '').trim() || 'Unknown';
+      const rssi = safeWardrivingInt(read('RSSI'));
+      const lat = safeWardrivingFloat(read('CurrentLatitude'));
+      const lng = safeWardrivingFloat(read('CurrentLongitude'));
+      const altitude = safeWardrivingFloat(read('AltitudeMeters'));
+      const accuracy = safeWardrivingFloat(read('AccuracyMeters'));
+      const firstSeen = String(read('FirstSeen') || '').trim();
+      const type = String(read('Type') || '').trim() || 'WIFI';
+      const authMode = normalizeWardrivingAuthMode(authModeRaw);
+      rows.push({
+        row: rows.length + 1,
+        bssid,
+        ssid: ssidRaw || '<hidden>',
+        auth_mode: authMode,
+        auth_mode_raw: authModeRaw,
+        channel,
+        rssi,
+        signal_quality: wardrivingSignalBucket(rssi),
+        lat,
+        lng,
+        altitude_m: altitude,
+        accuracy_m: accuracy,
+        first_seen: firstSeen,
+        type,
+        has_coordinates: lat != null && lng != null,
+        uploaded: String(fileMeta && fileMeta.name || '').startsWith('[uploaded]'),
+      });
+    }
+
+    const data = buildWardrivingDataFromRows(rows, fileMeta, existingMeta || { wigle_header: metaRow, columns });
+    data.meta = { wigle_header: metaRow, columns };
+    return data;
+  }
+
+  async function hydrateWardrivingDataFromCsv(path, fallbackMeta = {}){
+    const csvUrl = getApiUrl('/api/loot/download', { path });
+    const response = await apiFetch(csvUrl, { cache: 'no-store' });
+    if (!response.ok){
+      throw new Error('Failed to load wardriving CSV for client-side parsing');
+    }
+    const csvText = await response.text();
+    return parseWardrivingCsvText(csvText, fallbackMeta.file || {}, fallbackMeta.meta || null);
+  }
+
   function setWardrivingAuthLabel(value){
     if (!wardrivingVizAuthLabel) return;
     const authValue = String(value || '');
@@ -2018,9 +2221,14 @@
     try{
       const url = getApiUrl('/api/loot/wardriving', { path });
       const res = await apiFetch(url, { cache: 'no-store' });
-      const data = await res.json();
+      let data = await res.json();
       if (!res.ok){
         throw new Error(data && data.error ? data.error : 'Failed to parse wardriving CSV');
+      }
+      const rowCount = Array.isArray(data && data.rows) ? data.rows.length : 0;
+      const expectedCount = Number(data && data.stats && data.stats.networks || 0);
+      if (data && (data.rows_truncated || (expectedCount && rowCount && rowCount < expectedCount))){
+        data = await hydrateWardrivingDataFromCsv(path, data);
       }
       wardrivingVizState.data = data;
       if (wardrivingVizMeta){
