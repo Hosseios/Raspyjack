@@ -534,6 +534,7 @@
   let nmapVizState = { data: null, jsonUrl: '' };
   let wardrivingVizState = { data: null, jsonUrl: '', map: null, markers: [] };
   let wardrivingVizSelectedAuth = '';
+  let wardrivingVizAuthOpen = false;
   let payloadState = { categories: [], open: {}, activePath: null };
   let term = null;
   let fitAddon = null;
@@ -1430,7 +1431,9 @@
   function setWardrivingAuthOpen(open){
     if (!wardrivingVizAuthMenu || !wardrivingVizAuthTrigger) return;
     const isOpen = !!open;
+    wardrivingVizAuthOpen = isOpen;
     wardrivingVizAuthMenu.classList.toggle('hidden', !isOpen);
+    wardrivingVizAuthMenu.style.display = isOpen ? 'block' : 'none';
     wardrivingVizAuthTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   }
 
@@ -1440,7 +1443,7 @@
     if (wardrivingVizAuthMenu){
       const options = wardrivingVizAuthMenu.querySelectorAll('[data-auth-value]');
       options.forEach(option => {
-        const optionValue = String(option.getAttribute('data-auth-value') || '');
+        const optionValue = decodeURIComponent(String(option.getAttribute('data-auth-value') || ''));
         option.classList.toggle('is-active', optionValue === wardrivingVizSelectedAuth);
       });
     }
@@ -1767,6 +1770,38 @@
     `;
   }
 
+  function renderWardrivingSecurityCard(items){
+    const rows = Array.isArray(items) ? items : [];
+    const sorted = rows.slice().sort((left, right) => {
+      const leftMode = String(left && left.auth_mode || 'Unknown');
+      const rightMode = String(right && right.auth_mode || 'Unknown');
+      if (leftMode === 'Open' && rightMode !== 'Open') return -1;
+      if (leftMode !== 'Open' && rightMode === 'Open') return 1;
+      return Number(right && right.count || 0) - Number(left && left.count || 0);
+    });
+    return `
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">Security Types</div>
+        <div class="wardriving-security-list space-y-2">
+          ${sorted.length ? sorted.map(item => {
+            const mode = String(item && item.auth_mode || 'Unknown');
+            const icon = getWardrivingAuthIcon(mode);
+            const iconTone = mode === 'Open' ? 'text-cyan-300' : 'text-amber-300';
+            return `
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="inline-flex items-center gap-2 min-w-0 text-slate-300 truncate">
+                  <i class="fa-solid ${icon} ${iconTone} text-[11px]"></i>
+                  <span class="truncate">${escapeHtml(mode)}</span>
+                </span>
+                <span class="text-emerald-200 font-medium shrink-0">${escapeHtml(String(item && item.count || 0))}</span>
+              </div>
+            `;
+          }).join('') : '<div class="text-xs text-slate-500">No data.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
   function filteredWardrivingRows(){
     const data = wardrivingVizState.data;
     const rows = data && Array.isArray(data.rows) ? data.rows : [];
@@ -1849,7 +1884,7 @@
           ${mapData.truncated ? '<div class="mt-2 text-[11px] text-slate-500">Showing the first 500 map points.</div>' : ''}
         </section>
         <div class="space-y-4">
-          ${renderWardrivingDistCard('Security Types', data.auth_distribution, 'count', 'auth_mode')}
+          ${renderWardrivingSecurityCard(data.auth_distribution)}
           ${renderWardrivingDistCard('Channels', data.channel_distribution, 'count', 'channel')}
           ${renderWardrivingDistCard('Signal Quality', data.signal_distribution, 'count', 'label')}
         </div>
@@ -2353,10 +2388,11 @@
   });
   if (wardrivingVizAuthTrigger) wardrivingVizAuthTrigger.addEventListener('click', (e) => {
     e.preventDefault();
-    const isOpen = !!(wardrivingVizAuthMenu && !wardrivingVizAuthMenu.classList.contains('hidden'));
-    setWardrivingAuthOpen(!isOpen);
+    e.stopPropagation();
+    setWardrivingAuthOpen(!wardrivingVizAuthOpen);
   });
   if (wardrivingVizAuthMenu) wardrivingVizAuthMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
     const btn = e.target.closest('[data-auth-value]');
     if (!btn) return;
     const encodedValue = String(btn.getAttribute('data-auth-value') || '');

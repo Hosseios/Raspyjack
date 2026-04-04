@@ -386,6 +386,7 @@ main > .flex.items-center.justify-between.mb-4.md\:mb-6 {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(16, 185, 129, 0.55) rgba(15, 23, 42, 0.72);
+  z-index: 60;
 }
 
 .wardriving-auth-menu::-webkit-scrollbar {
@@ -453,6 +454,33 @@ main > .flex.items-center.justify-between.mb-4.md\:mb-6 {
 
 .wardriving-auth-option.is-active .wardriving-auth-check {
   opacity: 1;
+}
+
+.wardriving-security-list {
+  max-height: 14rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.55) rgba(15, 23, 42, 0.72);
+}
+
+.wardriving-security-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.wardriving-security-list::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.wardriving-security-list::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.45);
+  border-radius: 999px;
+}
+
+.wardriving-security-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6);
 }
 
 #lootList::-webkit-scrollbar-track {
