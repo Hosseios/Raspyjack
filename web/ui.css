@@ -69,6 +69,16 @@ select {
   border-color: var(--rj-parity-border) !important;
   border-radius: 10px !important;
 }
+select {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
 input:focus,
 textarea:focus,
 select:focus {
@@ -348,6 +358,101 @@ main > .flex.items-center.justify-between.mb-4.md\:mb-6 {
 
 .leaflet-control-attribution a {
   color: #86efac !important;
+}
+
+#wardrivingVizAuthFilter {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+
+#wardrivingVizAuthFilter option {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+.wardriving-auth-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.wardriving-auth-menu {
+  max-height: 18rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.55) rgba(15, 23, 42, 0.72);
+}
+
+.wardriving-auth-menu::-webkit-scrollbar {
+  width: 10px;
+}
+
+.wardriving-auth-menu::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.wardriving-auth-menu::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.45);
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.85);
+}
+
+.wardriving-auth-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6);
+}
+
+.wardriving-auth-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  text-align: left;
+}
+
+.wardriving-auth-option:hover {
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.wardriving-auth-option.is-active {
+  background: rgba(16, 185, 129, 0.18);
+  color: #d1fae5;
+}
+
+.wardriving-auth-option:last-child {
+  border-bottom: 0;
+}
+
+.wardriving-auth-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.wardriving-auth-option-label i {
+  width: 0.9rem;
+  text-align: center;
+}
+
+.wardriving-auth-check {
+  color: #86efac;
+  opacity: 0;
+}
+
+.wardriving-auth-option.is-active .wardriving-auth-check {
+  opacity: 1;
 }
 
 #lootList::-webkit-scrollbar-track {

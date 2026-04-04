@@ -89,7 +89,10 @@
   const wardrivingVizClose = document.getElementById('wardrivingVizClose');
   const wardrivingVizDownloadCsv = document.getElementById('wardrivingVizDownloadCsv');
   const wardrivingVizDownloadJson = document.getElementById('wardrivingVizDownloadJson');
-  const wardrivingVizAuthFilter = document.getElementById('wardrivingVizAuthFilter');
+  const wardrivingVizAuthDropdown = document.getElementById('wardrivingVizAuthDropdown');
+  const wardrivingVizAuthTrigger = document.getElementById('wardrivingVizAuthTrigger');
+  const wardrivingVizAuthLabel = document.getElementById('wardrivingVizAuthLabel');
+  const wardrivingVizAuthMenu = document.getElementById('wardrivingVizAuthMenu');
   const wardrivingVizSearch = document.getElementById('wardrivingVizSearch');
   const payloadSidebar = document.getElementById('payloadSidebar');
   const payloadStatus = document.getElementById('payloadStatus');
@@ -530,6 +533,7 @@
   let lootState = { path: '', parent: '' };
   let nmapVizState = { data: null, jsonUrl: '' };
   let wardrivingVizState = { data: null, jsonUrl: '', map: null, markers: [] };
+  let wardrivingVizSelectedAuth = '';
   let payloadState = { categories: [], open: {}, activePath: null };
   let term = null;
   let fitAddon = null;
@@ -1409,6 +1413,78 @@
     return num.toFixed(5);
   }
 
+  function getWardrivingAuthIcon(mode){
+    return String(mode || '').toLowerCase() === 'open' ? 'fa-lock-open' : 'fa-lock';
+  }
+
+  function setWardrivingAuthLabel(value){
+    if (!wardrivingVizAuthLabel) return;
+    const authValue = String(value || '');
+    if (!authValue){
+      wardrivingVizAuthLabel.innerHTML = '<i class="fa-solid fa-filter text-[11px] text-emerald-300"></i><span>All auth modes</span>';
+      return;
+    }
+    wardrivingVizAuthLabel.innerHTML = `<i class="fa-solid ${getWardrivingAuthIcon(authValue)} text-[11px] text-emerald-300"></i><span>${escapeHtml(authValue)}</span>`;
+  }
+
+  function setWardrivingAuthOpen(open){
+    if (!wardrivingVizAuthMenu || !wardrivingVizAuthTrigger) return;
+    const isOpen = !!open;
+    wardrivingVizAuthMenu.classList.toggle('hidden', !isOpen);
+    wardrivingVizAuthTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  }
+
+  function setWardrivingAuthFilter(value){
+    wardrivingVizSelectedAuth = String(value || '');
+    setWardrivingAuthLabel(wardrivingVizSelectedAuth);
+    if (wardrivingVizAuthMenu){
+      const options = wardrivingVizAuthMenu.querySelectorAll('[data-auth-value]');
+      options.forEach(option => {
+        const optionValue = String(option.getAttribute('data-auth-value') || '');
+        option.classList.toggle('is-active', optionValue === wardrivingVizSelectedAuth);
+      });
+    }
+  }
+
+  function renderWardrivingAuthMenu(data){
+    if (!wardrivingVizAuthMenu) return;
+    const authDistribution = Array.isArray(data && data.auth_distribution) ? data.auth_distribution : [];
+    const sorted = authDistribution.slice().sort((left, right) => {
+      const leftMode = String(left && left.auth_mode || 'Unknown');
+      const rightMode = String(right && right.auth_mode || 'Unknown');
+      if (leftMode === 'Open' && rightMode !== 'Open') return -1;
+      if (leftMode !== 'Open' && rightMode === 'Open') return 1;
+      return leftMode.localeCompare(rightMode);
+    });
+    const allOption = `
+      <button type="button" class="wardriving-auth-option" data-auth-value="">
+        <span class="wardriving-auth-option-label">
+          <i class="fa-solid fa-filter text-emerald-300"></i>
+          <span>All auth modes</span>
+        </span>
+        <i class="wardriving-auth-check fa-solid fa-check text-[11px]"></i>
+      </button>
+    `;
+    const authOptions = sorted.map(item => {
+      const mode = String(item && item.auth_mode || 'Unknown');
+      const count = String(item && item.count || 0);
+      return `
+        <button type="button" class="wardriving-auth-option" data-auth-value="${encodeData(mode)}">
+          <span class="wardriving-auth-option-label">
+            <i class="fa-solid ${getWardrivingAuthIcon(mode)} ${mode === 'Open' ? 'text-cyan-300' : 'text-amber-300'}"></i>
+            <span>${escapeHtml(mode)}</span>
+          </span>
+          <span class="flex items-center gap-3 shrink-0">
+            <span class="text-[11px] text-slate-400">${escapeHtml(count)}</span>
+            <i class="wardriving-auth-check fa-solid fa-check text-[11px]"></i>
+          </span>
+        </button>
+      `;
+    }).join('');
+    wardrivingVizAuthMenu.innerHTML = allOption + authOptions;
+    setWardrivingAuthFilter(wardrivingVizSelectedAuth);
+  }
+
   function renderNmapSummaryCards(data, hosts){
     const hostCount = hosts.length;
     const upCount = hosts.filter(host => String(host && host.status || '').toLowerCase() === 'up').length;
@@ -1694,7 +1770,7 @@
   function filteredWardrivingRows(){
     const data = wardrivingVizState.data;
     const rows = data && Array.isArray(data.rows) ? data.rows : [];
-    const auth = wardrivingVizAuthFilter ? String(wardrivingVizAuthFilter.value || '') : '';
+    const auth = String(wardrivingVizSelectedAuth || '');
     const search = wardrivingVizSearch ? String(wardrivingVizSearch.value || '').trim().toLowerCase() : '';
     return rows.filter(row => {
       if (auth && String(row.auth_mode || '') !== auth) return false;
@@ -1813,14 +1889,7 @@
         </div>
       </section>
     `;
-    if (wardrivingVizAuthFilter){
-      const authDistribution = Array.isArray(data.auth_distribution) ? data.auth_distribution : [];
-      const currentValue = wardrivingVizAuthFilter.value || '';
-      wardrivingVizAuthFilter.innerHTML = '<option value="">All auth modes</option>' + authDistribution.map(item => `
-        <option value="${escapeHtml(String(item.auth_mode || ''))}">${escapeHtml(String(item.auth_mode || 'Unknown'))}</option>
-      `).join('');
-      wardrivingVizAuthFilter.value = currentValue;
-    }
+    renderWardrivingAuthMenu(data);
     if (mapData.has_coordinates){
       initWardrivingMap();
     } else {
@@ -1835,7 +1904,10 @@
     if (wardrivingVizMeta) wardrivingVizMeta.textContent = path ? `/${path}` : '';
     if (wardrivingVizDownloadCsv) wardrivingVizDownloadCsv.href = csvUrl;
     if (wardrivingVizSearch) wardrivingVizSearch.value = '';
-    if (wardrivingVizAuthFilter) wardrivingVizAuthFilter.innerHTML = '<option value="">All auth modes</option>';
+    wardrivingVizSelectedAuth = '';
+    if (wardrivingVizAuthMenu) wardrivingVizAuthMenu.innerHTML = '';
+    setWardrivingAuthLabel('');
+    setWardrivingAuthOpen(false);
     setWardrivingVizError('');
     setWardrivingVizStatus('Loading...');
     wardrivingVizState.data = null;
@@ -2279,8 +2351,26 @@
   if (wardrivingVizModal) wardrivingVizModal.addEventListener('click', (e) => {
     if (e.target === wardrivingVizModal) closeWardrivingViz();
   });
-  if (wardrivingVizAuthFilter) wardrivingVizAuthFilter.addEventListener('change', renderWardrivingVisualization);
+  if (wardrivingVizAuthTrigger) wardrivingVizAuthTrigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    const isOpen = !!(wardrivingVizAuthMenu && !wardrivingVizAuthMenu.classList.contains('hidden'));
+    setWardrivingAuthOpen(!isOpen);
+  });
+  if (wardrivingVizAuthMenu) wardrivingVizAuthMenu.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-auth-value]');
+    if (!btn) return;
+    const encodedValue = String(btn.getAttribute('data-auth-value') || '');
+    const nextValue = decodeURIComponent(encodedValue);
+    setWardrivingAuthFilter(nextValue);
+    setWardrivingAuthOpen(false);
+    renderWardrivingVisualization();
+  });
   if (wardrivingVizSearch) wardrivingVizSearch.addEventListener('input', renderWardrivingVisualization);
+  document.addEventListener('click', (e) => {
+    if (!wardrivingVizAuthDropdown) return;
+    if (wardrivingVizAuthDropdown.contains(e.target)) return;
+    setWardrivingAuthOpen(false);
+  });
   if (authModalConfirm) authModalConfirm.addEventListener('click', () => {
     resolveAuthPrompt({
       recovery: authRecoveryMode,

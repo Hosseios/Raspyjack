@@ -710,9 +710,17 @@
           <div id="wardrivingVizStatus" class="text-[11px] text-slate-400">Ready</div>
           <div class="flex flex-wrap items-center gap-2">
             <input id="wardrivingVizSearch" type="search" placeholder="Search SSID or BSSID" class="w-56 rounded-lg bg-slate-900/80 border border-slate-700/70 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
-            <select id="wardrivingVizAuthFilter" class="rounded-lg bg-slate-900/80 border border-slate-700/70 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
-              <option value="">All auth modes</option>
-            </select>
+            <div id="wardrivingVizAuthDropdown" class="relative min-w-[13rem]">
+              <button id="wardrivingVizAuthTrigger" type="button" class="wardriving-auth-trigger w-full rounded-lg bg-slate-900/80 border border-slate-700/70 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+                <span id="wardrivingVizAuthLabel" class="truncate flex items-center gap-2">
+                  <i class="fa-solid fa-filter text-[11px] text-emerald-300"></i>
+                  <span>All auth modes</span>
+                </span>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+              </button>
+              <div id="wardrivingVizAuthMenu" class="hidden wardriving-auth-menu absolute right-0 mt-2 w-full rounded-xl border border-slate-700/70 bg-slate-950/95 shadow-[0_12px_28px_rgba(2,6,23,0.55)] overflow-hidden z-20">
+              </div>
+            </div>
           </div>
         </div>
         <div class="px-4 py-4 max-h-[80vh] overflow-auto">
