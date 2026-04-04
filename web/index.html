@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="./device-shell.css">
   <link rel="stylesheet" href="./ui.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -690,6 +691,40 @@
     </div>
   </div>
 
+  <!-- Wardriving visualization modal -->
+  <div id="wardrivingVizModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto mt-4 md:mt-8 px-4 pb-6">
+      <div class="rounded-2xl border border-slate-700/60 bg-slate-950/95 shadow-[0_0_40px_rgba(15,23,42,0.7)] overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800/70 gap-3">
+          <div class="min-w-0">
+            <div id="wardrivingVizTitle" class="text-sm font-semibold text-emerald-300 truncate">Wardriving Dashboard</div>
+            <div id="wardrivingVizMeta" class="text-[11px] text-slate-400 mt-1"></div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a id="wardrivingVizDownloadCsv" href="#" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-600/40 text-slate-200 hover:bg-slate-700/80 transition">CSV</a>
+            <a id="wardrivingVizDownloadJson" href="#" download="wardriving.json" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-600/40 text-slate-200 hover:bg-slate-700/80 transition">JSON</a>
+            <button id="wardrivingVizClose" type="button" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-600/80 border border-emerald-300/30 text-white hover:bg-emerald-500/80 transition">Close</button>
+          </div>
+        </div>
+        <div class="px-4 py-3 border-b border-slate-800/70 flex flex-wrap items-center justify-between gap-3">
+          <div id="wardrivingVizStatus" class="text-[11px] text-slate-400">Ready</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="wardrivingVizSearch" type="search" placeholder="Search SSID or BSSID" class="w-56 rounded-lg bg-slate-900/80 border border-slate-700/70 px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+            <select id="wardrivingVizAuthFilter" class="rounded-lg bg-slate-900/80 border border-slate-700/70 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400">
+              <option value="">All auth modes</option>
+            </select>
+          </div>
+        </div>
+        <div class="px-4 py-4 max-h-[80vh] overflow-auto">
+          <div id="wardrivingVizError" class="hidden mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs text-rose-200"></div>
+          <div id="wardrivingVizBody" class="space-y-4">
+            <div class="text-sm text-slate-400">No wardriving data loaded.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Tailscale setup modal -->
   <div id="tailscaleModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm">
     <div class="max-w-md mx-auto mt-16 md:mt-20 px-4">
@@ -759,6 +794,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="./shared.js"></script>
   <script src="./app.js"></script>
 </body>

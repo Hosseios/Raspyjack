@@ -80,6 +80,17 @@
   const nmapVizDownloadXml = document.getElementById('nmapVizDownloadXml');
   const nmapVizDownloadJson = document.getElementById('nmapVizDownloadJson');
   const nmapVizFilterVuln = document.getElementById('nmapVizFilterVuln');
+  const wardrivingVizModal = document.getElementById('wardrivingVizModal');
+  const wardrivingVizTitle = document.getElementById('wardrivingVizTitle');
+  const wardrivingVizMeta = document.getElementById('wardrivingVizMeta');
+  const wardrivingVizStatus = document.getElementById('wardrivingVizStatus');
+  const wardrivingVizBody = document.getElementById('wardrivingVizBody');
+  const wardrivingVizError = document.getElementById('wardrivingVizError');
+  const wardrivingVizClose = document.getElementById('wardrivingVizClose');
+  const wardrivingVizDownloadCsv = document.getElementById('wardrivingVizDownloadCsv');
+  const wardrivingVizDownloadJson = document.getElementById('wardrivingVizDownloadJson');
+  const wardrivingVizAuthFilter = document.getElementById('wardrivingVizAuthFilter');
+  const wardrivingVizSearch = document.getElementById('wardrivingVizSearch');
   const payloadSidebar = document.getElementById('payloadSidebar');
   const payloadStatus = document.getElementById('payloadStatus');
   const payloadStatusDot = document.getElementById('payloadStatusDot');
@@ -518,6 +529,7 @@
   let activeTab = 'device';
   let lootState = { path: '', parent: '' };
   let nmapVizState = { data: null, jsonUrl: '' };
+  let wardrivingVizState = { data: null, jsonUrl: '', map: null, markers: [] };
   let payloadState = { categories: [], open: {}, activePath: null };
   let term = null;
   let fitAddon = null;
@@ -1283,10 +1295,37 @@
     nmapVizError.classList.toggle('hidden', !text);
   }
 
+  function setWardrivingVizStatus(text){
+    if (!wardrivingVizStatus) return;
+    wardrivingVizStatus.textContent = text || 'Ready';
+    applyStatusTone(wardrivingVizStatus, text || 'Ready');
+  }
+
+  function setWardrivingVizError(message){
+    if (!wardrivingVizError) return;
+    const text = String(message || '').trim();
+    wardrivingVizError.textContent = text;
+    wardrivingVizError.classList.toggle('hidden', !text);
+  }
+
   function revokeNmapJsonUrl(){
     if (!nmapVizState.jsonUrl) return;
     try { URL.revokeObjectURL(nmapVizState.jsonUrl); } catch {}
     nmapVizState.jsonUrl = '';
+  }
+
+  function revokeWardrivingJsonUrl(){
+    if (!wardrivingVizState.jsonUrl) return;
+    try { URL.revokeObjectURL(wardrivingVizState.jsonUrl); } catch {}
+    wardrivingVizState.jsonUrl = '';
+  }
+
+  function destroyWardrivingMap(){
+    if (wardrivingVizState.map){
+      try { wardrivingVizState.map.remove(); } catch {}
+    }
+    wardrivingVizState.map = null;
+    wardrivingVizState.markers = [];
   }
 
   function closeNmapViz(){
@@ -1294,6 +1333,15 @@
     nmapVizModal.classList.add('hidden');
     setNmapVizError('');
     setNmapVizStatus('Ready');
+  }
+
+  function closeWardrivingViz(){
+    if (!wardrivingVizModal) return;
+    wardrivingVizModal.classList.add('hidden');
+    setWardrivingVizError('');
+    setWardrivingVizStatus('Ready');
+    revokeWardrivingJsonUrl();
+    destroyWardrivingMap();
   }
 
   function hasStructuredData(value){
@@ -1338,6 +1386,27 @@
     const current = String(parentPath || '');
     const fileName = String(name || '');
     return /\.xml$/i.test(fileName) && (current === 'Nmap' || current.startsWith('Nmap/'));
+  }
+
+  function isWardrivingLootCsv(parentPath, name){
+    const current = String(parentPath || '');
+    const fileName = String(name || '');
+    if (!/\.csv$/i.test(fileName)) return false;
+    if (!(current === 'wardriving' || current.startsWith('wardriving/'))) return false;
+    return /wigle|wardriv|uploaded/i.test(fileName);
+  }
+
+  function formatSignal(value){
+    if (value === null || value === undefined || value === '') return 'n/a';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 'n/a';
+    return `${num} dBm`;
+  }
+
+  function formatCoord(value){
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 'n/a';
+    return num.toFixed(5);
   }
 
   function renderNmapSummaryCards(data, hosts){
@@ -1584,6 +1653,228 @@
     }
   }
 
+  function renderWardrivingSummaryCards(data){
+    const stats = data && data.stats ? data.stats : {};
+    const cards = [
+      { label: 'Networks', value: String(stats.networks ?? 0), tone: 'text-emerald-200' },
+      { label: 'Unique BSSIDs', value: String(stats.unique_bssids ?? 0), tone: 'text-cyan-200' },
+      { label: 'GPS Points', value: String(stats.with_coordinates ?? 0), tone: 'text-slate-100' },
+      { label: 'Strongest', value: formatSignal(stats.strongest_signal), tone: 'text-slate-100' },
+      { label: 'Average', value: formatSignal(stats.average_signal), tone: 'text-slate-100' },
+    ];
+    return `
+      <div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        ${cards.map(card => `
+          <div class="rounded-xl border border-slate-800/70 bg-slate-900/50 px-4 py-3">
+            <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">${escapeHtml(card.label)}</div>
+            <div class="mt-2 text-lg font-semibold ${card.tone}">${escapeHtml(card.value)}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderWardrivingDistCard(title, items, keyField, labelField){
+    const rows = Array.isArray(items) ? items : [];
+    return `
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-3">${escapeHtml(title)}</div>
+        <div class="space-y-2">
+          ${rows.length ? rows.map(item => `
+            <div class="flex items-center justify-between gap-3 text-xs">
+              <span class="text-slate-300 truncate">${escapeHtml(String(item[labelField] || 'Unknown'))}</span>
+              <span class="text-emerald-200 font-medium">${escapeHtml(String(item[keyField] || 0))}</span>
+            </div>
+          `).join('') : '<div class="text-xs text-slate-500">No data.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function filteredWardrivingRows(){
+    const data = wardrivingVizState.data;
+    const rows = data && Array.isArray(data.rows) ? data.rows : [];
+    const auth = wardrivingVizAuthFilter ? String(wardrivingVizAuthFilter.value || '') : '';
+    const search = wardrivingVizSearch ? String(wardrivingVizSearch.value || '').trim().toLowerCase() : '';
+    return rows.filter(row => {
+      if (auth && String(row.auth_mode || '') !== auth) return false;
+      if (!search) return true;
+      const haystack = [row.ssid, row.bssid, row.channel, row.auth_mode].join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  function initWardrivingMap(){
+    const container = document.getElementById('wardrivingMap');
+    const data = wardrivingVizState.data;
+    const mapData = data && data.map ? data.map : null;
+    if (!container || !mapData || !mapData.has_coordinates || !window.L) return;
+    destroyWardrivingMap();
+    const bounds = mapData.bounds;
+    if (!bounds) return;
+    const map = window.L.map(container, { zoomControl: true, attributionControl: true });
+    wardrivingVizState.map = map;
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    wardrivingVizState.markers = (Array.isArray(mapData.points) ? mapData.points : []).map(point => {
+      const marker = window.L.circleMarker([point.lat, point.lng], {
+        radius: 5,
+        weight: 1,
+        color: '#34d399',
+        fillColor: '#10b981',
+        fillOpacity: 0.6,
+      });
+      marker.bindPopup(`
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.4;">
+          <div><strong>${escapeHtml(point.ssid || '<hidden>')}</strong></div>
+          <div>${escapeHtml(point.bssid || '')}</div>
+          <div>${escapeHtml(String(point.auth_mode || 'Unknown'))} · ${escapeHtml(String(point.channel || 'Unknown'))}</div>
+          <div>${escapeHtml(formatSignal(point.rssi))}</div>
+        </div>
+      `);
+      marker.addTo(map);
+      return marker;
+    });
+    map.fitBounds([
+      [bounds.min_lat, bounds.min_lng],
+      [bounds.max_lat, bounds.max_lng],
+    ], { padding: [24, 24] });
+    setTimeout(() => {
+      try { map.invalidateSize(); } catch {}
+    }, 50);
+  }
+
+  function renderWardrivingVisualization(){
+    if (!wardrivingVizBody) return;
+    const data = wardrivingVizState.data;
+    if (!data){
+      wardrivingVizBody.innerHTML = '<div class="text-sm text-slate-400">No wardriving data loaded.</div>';
+      return;
+    }
+    const rows = filteredWardrivingRows();
+    const mapData = data.map || {};
+    const infoBits = [
+      data && data.stats && data.stats.first_seen ? `First ${data.stats.first_seen}` : '',
+      data && data.stats && data.stats.last_seen ? `Last ${data.stats.last_seen}` : '',
+      data && data.stats && data.stats.uploaded ? 'Uploaded to WiGLE' : '',
+      data && data.rows_truncated ? 'Rows truncated in UI' : '',
+    ].filter(Boolean);
+    wardrivingVizBody.innerHTML = `
+      ${renderWardrivingSummaryCards(data)}
+      <div class="grid xl:grid-cols-[1.3fr_0.7fr] gap-4">
+        <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 p-4">
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Coverage Map</div>
+            <div class="text-[11px] text-slate-500">${escapeHtml(infoBits.join(' · ') || 'Map data')}</div>
+          </div>
+          ${mapData.has_coordinates ? '<div id="wardrivingMap" class="wardriving-map"></div>' : '<div class="rounded-xl border border-slate-800/70 bg-slate-950/50 px-4 py-10 text-sm text-slate-400">This capture does not contain usable GPS coordinates, so the map is unavailable.</div>'}
+          ${mapData.truncated ? '<div class="mt-2 text-[11px] text-slate-500">Showing the first 500 map points.</div>' : ''}
+        </section>
+        <div class="space-y-4">
+          ${renderWardrivingDistCard('Security Types', data.auth_distribution, 'count', 'auth_mode')}
+          ${renderWardrivingDistCard('Channels', data.channel_distribution, 'count', 'channel')}
+          ${renderWardrivingDistCard('Signal Quality', data.signal_distribution, 'count', 'label')}
+        </div>
+      </div>
+      <section class="rounded-xl border border-slate-800/70 bg-slate-900/45 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800/70 flex items-center justify-between gap-3">
+          <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500">Networks</div>
+          <div class="text-[11px] text-slate-500">${escapeHtml(String(rows.length))} visible</div>
+        </div>
+        <div class="overflow-auto">
+          <table class="min-w-full text-xs text-left text-slate-200">
+            <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-[0.16em] text-[10px]">
+              <tr>
+                <th class="px-4 py-3">SSID</th>
+                <th class="px-4 py-3">BSSID</th>
+                <th class="px-4 py-3">Auth</th>
+                <th class="px-4 py-3">Ch</th>
+                <th class="px-4 py-3">Signal</th>
+                <th class="px-4 py-3">Lat</th>
+                <th class="px-4 py-3">Lng</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60">
+              ${rows.length ? rows.map(row => `
+                <tr class="hover:bg-slate-800/30 transition">
+                  <td class="px-4 py-3 text-slate-100 font-medium">${escapeHtml(String(row.ssid || '<hidden>'))}</td>
+                  <td class="px-4 py-3 text-slate-400 font-mono">${escapeHtml(String(row.bssid || ''))}</td>
+                  <td class="px-4 py-3">${escapeHtml(String(row.auth_mode || 'Unknown'))}</td>
+                  <td class="px-4 py-3">${escapeHtml(String(row.channel || 'Unknown'))}</td>
+                  <td class="px-4 py-3">${escapeHtml(formatSignal(row.rssi))}</td>
+                  <td class="px-4 py-3">${escapeHtml(formatCoord(row.lat))}</td>
+                  <td class="px-4 py-3">${escapeHtml(formatCoord(row.lng))}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="7" class="px-4 py-6 text-sm text-slate-400">No networks match the current filter.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+    if (wardrivingVizAuthFilter){
+      const authDistribution = Array.isArray(data.auth_distribution) ? data.auth_distribution : [];
+      const currentValue = wardrivingVizAuthFilter.value || '';
+      wardrivingVizAuthFilter.innerHTML = '<option value="">All auth modes</option>' + authDistribution.map(item => `
+        <option value="${escapeHtml(String(item.auth_mode || ''))}">${escapeHtml(String(item.auth_mode || 'Unknown'))}</option>
+      `).join('');
+      wardrivingVizAuthFilter.value = currentValue;
+    }
+    if (mapData.has_coordinates){
+      initWardrivingMap();
+    } else {
+      destroyWardrivingMap();
+    }
+  }
+
+  async function loadWardrivingVisualization(path, name){
+    if (!wardrivingVizModal) return;
+    const csvUrl = getApiUrl('/api/loot/download', { path });
+    if (wardrivingVizTitle) wardrivingVizTitle.textContent = name || 'Wardriving Dashboard';
+    if (wardrivingVizMeta) wardrivingVizMeta.textContent = path ? `/${path}` : '';
+    if (wardrivingVizDownloadCsv) wardrivingVizDownloadCsv.href = csvUrl;
+    if (wardrivingVizSearch) wardrivingVizSearch.value = '';
+    if (wardrivingVizAuthFilter) wardrivingVizAuthFilter.innerHTML = '<option value="">All auth modes</option>';
+    setWardrivingVizError('');
+    setWardrivingVizStatus('Loading...');
+    wardrivingVizState.data = null;
+    revokeWardrivingJsonUrl();
+    destroyWardrivingMap();
+    if (wardrivingVizBody) wardrivingVizBody.innerHTML = '<div class="text-sm text-slate-400">Parsing CSV and building wardriving dashboard...</div>';
+    wardrivingVizModal.classList.remove('hidden');
+
+    try{
+      const url = getApiUrl('/api/loot/wardriving', { path });
+      const res = await apiFetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok){
+        throw new Error(data && data.error ? data.error : 'Failed to parse wardriving CSV');
+      }
+      wardrivingVizState.data = data;
+      if (wardrivingVizMeta){
+        const metaBits = [
+          path ? `/${path}` : '',
+          data && data.file && data.file.size ? formatBytes(data.file.size) : '',
+          data && data.map && data.map.has_coordinates ? `${data.map.point_count} map points` : 'No map coordinates',
+        ].filter(Boolean);
+        wardrivingVizMeta.textContent = metaBits.join(' · ');
+      }
+      if (wardrivingVizDownloadJson){
+        const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        wardrivingVizState.jsonUrl = URL.createObjectURL(jsonBlob);
+        wardrivingVizDownloadJson.href = wardrivingVizState.jsonUrl;
+        wardrivingVizDownloadJson.download = String(name || 'wardriving').replace(/\.csv$/i, '.json');
+      }
+      renderWardrivingVisualization();
+      setWardrivingVizStatus('Ready');
+    }catch(e){
+      setWardrivingVizStatus('Parse failed');
+      setWardrivingVizError(e && e.message ? e.message : 'Failed to parse wardriving CSV');
+      if (wardrivingVizBody) wardrivingVizBody.innerHTML = '<div class="text-sm text-slate-400">The CSV file could not be visualized.</div>';
+    }
+  }
+
   function renderLoot(items){
     if (!lootList) return;
     if (!items.length){
@@ -1599,11 +1890,14 @@
       const vizAction = isNmapLootXml(lootState.path, item.name)
         ? `<span role="button" tabindex="0" title="Visualize Nmap XML" aria-label="Visualize Nmap XML" data-visualize-nmap="${encodedName}" class="ml-2 inline-flex h-6 w-6 items-center justify-center rounded-md border border-emerald-400/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 transition align-middle"><i class="fa-solid fa-network-wired pointer-events-none text-[11px]"></i></span>`
         : '';
+      const wardrivingAction = isWardrivingLootCsv(lootState.path, item.name)
+        ? `<span role="button" tabindex="0" title="Open wardriving dashboard" aria-label="Open wardriving dashboard" data-visualize-wardriving="${encodedName}" class="ml-2 inline-flex h-6 w-6 items-center justify-center rounded-md border border-cyan-400/20 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 transition align-middle"><i class="fa-solid fa-location-dot pointer-events-none text-[11px]"></i></span>`
+        : '';
       return `
         <button class="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-slate-800/60 transition loot-item" data-type="${itemType}" data-name="${encodedName}">
           <span class="text-lg">${icon}</span>
           <div class="flex-1 min-w-0">
-            <div class="text-sm text-slate-100 truncate"><span>${safeName}</span>${vizAction}</div>
+            <div class="text-sm text-slate-100 truncate"><span>${safeName}</span>${vizAction}${wardrivingAction}</div>
             <div class="text-[11px] text-slate-400">${escapeHtml(meta)}</div>
           </div>
           <div class="text-xs text-slate-400">${itemType === 'dir' ? 'Open' : 'Download'}</div>
@@ -1893,6 +2187,15 @@
       loadNmapVisualization(vizPath, vizName);
       return;
     }
+    const wardrivingBtn = e.target.closest('[data-visualize-wardriving]');
+    if (wardrivingBtn){
+      e.preventDefault();
+      const encodedViz = wardrivingBtn.getAttribute('data-visualize-wardriving') || '';
+      const vizName = decodeURIComponent(encodedViz);
+      const vizPath = buildLootPath(lootState.path, vizName);
+      loadWardrivingVisualization(vizPath, vizName);
+      return;
+    }
     const btn = e.target.closest('.loot-item');
     if (!btn) return;
     const encoded = btn.getAttribute('data-name') || '';
@@ -1972,6 +2275,12 @@
     if (e.target === nmapVizModal) closeNmapViz();
   });
   if (nmapVizFilterVuln) nmapVizFilterVuln.addEventListener('change', renderNmapVisualization);
+  if (wardrivingVizClose) wardrivingVizClose.addEventListener('click', closeWardrivingViz);
+  if (wardrivingVizModal) wardrivingVizModal.addEventListener('click', (e) => {
+    if (e.target === wardrivingVizModal) closeWardrivingViz();
+  });
+  if (wardrivingVizAuthFilter) wardrivingVizAuthFilter.addEventListener('change', renderWardrivingVisualization);
+  if (wardrivingVizSearch) wardrivingVizSearch.addEventListener('input', renderWardrivingVisualization);
   if (authModalConfirm) authModalConfirm.addEventListener('click', () => {
     resolveAuthPrompt({
       recovery: authRecoveryMode,

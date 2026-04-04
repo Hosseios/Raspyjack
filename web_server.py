@@ -10,6 +10,7 @@ Routes:
   /api/loot/download  -> file download (read-only)
   /api/loot/view      -> text preview (read-only)
     /api/loot/nmap      -> normalized Nmap XML (read-only)
+    /api/loot/wardriving -> normalized wardriving CSV (read-only)
   /api/system/status  -> live system monitor metrics
   /api/settings/discord_webhook -> get/save Discord webhook
   /api/auth/*         -> bootstrap/login/session endpoints
@@ -29,6 +30,7 @@ from __future__ import annotations
 
 import json
 import base64
+import csv
 import hmac
 import hashlib
 import mimetypes
@@ -147,9 +149,227 @@ TEXT_EXTS = {
     ".txt", ".log", ".md", ".json", ".csv", ".conf", ".ini", ".yaml", ".yml",
     ".pcapng.txt", ".xml", ".sqlite", ".db", ".out", ".py", ".sh"
 }
+WARDRIVING_REQUIRED_COLUMNS = {
+    "MAC",
+    "SSID",
+    "AuthMode",
+    "FirstSeen",
+    "Channel",
+    "RSSI",
+    "CurrentLatitude",
+    "CurrentLongitude",
+    "AltitudeMeters",
+    "AccuracyMeters",
+    "Type",
+}
 
 _CPU_SNAPSHOT = None
 _LOGIN_FAILS: dict[str, list[float]] = {}
+
+
+def _safe_float(value) -> float | None:
+    try:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return float(text)
+    except Exception:
+        return None
+
+
+def _safe_int(value) -> int | None:
+    try:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return int(float(text))
+    except Exception:
+        return None
+
+
+def _normalize_auth_mode(raw_value: str) -> str:
+    text = str(raw_value or "").upper()
+    if "WPA3" in text or "SAE" in text:
+        return "WPA3"
+    if "WPA2" in text:
+        return "WPA2"
+    if "WPA" in text:
+        return "WPA"
+    if "WEP" in text:
+        return "WEP"
+    if "OPEN" in text or text == "[ESS]":
+        return "Open"
+    if not text:
+        return "Unknown"
+    return text.replace("[", "").replace("]", " ").strip() or "Unknown"
+
+
+def _wardriving_signal_bucket(signal: int | None) -> str:
+    if signal is None:
+        return "Unknown"
+    if signal >= -55:
+        return "Excellent"
+    if signal >= -67:
+        return "Strong"
+    if signal >= -75:
+        return "Fair"
+    return "Weak"
+
+
+def _compute_bounds(points: list[dict]) -> dict | None:
+    if not points:
+        return None
+    lats = [point["lat"] for point in points]
+    lngs = [point["lng"] for point in points]
+    return {
+        "min_lat": min(lats),
+        "max_lat": max(lats),
+        "min_lng": min(lngs),
+        "max_lng": max(lngs),
+    }
+
+
+def parse_wardriving_csv_file(path: Path) -> dict:
+    try:
+        with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+            reader = csv.reader(handle)
+            meta_row = next(reader, None)
+            header_row = next(reader, None)
+            if not meta_row or not header_row:
+                raise ValueError("CSV is empty or missing WiGLE header rows")
+            if not meta_row[0].startswith("WigleWifi-"):
+                raise ValueError("Unsupported CSV format: expected WiGLE export")
+
+            columns = [str(value or "").strip() for value in header_row]
+            missing = sorted(WARDRIVING_REQUIRED_COLUMNS - set(columns))
+            if missing:
+                raise ValueError(f"Unsupported CSV schema: missing {', '.join(missing)}")
+
+            dict_reader = csv.DictReader(handle, fieldnames=columns)
+            rows: list[dict] = []
+            points: list[dict] = []
+            auth_counts: dict[str, int] = {}
+            channel_counts: dict[str, int] = {}
+            signal_counts: dict[str, int] = {}
+            unique_bssids: set[str] = set()
+            unique_ssids: set[str] = set()
+            uploaded = path.name.startswith("[uploaded]")
+            signal_values: list[int] = []
+            first_seen_values: list[str] = []
+            for index, raw_row in enumerate(dict_reader, start=1):
+                bssid = str(raw_row.get("MAC") or "").strip()
+                ssid = str(raw_row.get("SSID") or "").strip()
+                auth_mode_raw = str(raw_row.get("AuthMode") or "").strip()
+                auth_mode = _normalize_auth_mode(auth_mode_raw)
+                channel_text = str(raw_row.get("Channel") or "").strip() or "Unknown"
+                signal = _safe_int(raw_row.get("RSSI"))
+                lat = _safe_float(raw_row.get("CurrentLatitude"))
+                lng = _safe_float(raw_row.get("CurrentLongitude"))
+                altitude = _safe_float(raw_row.get("AltitudeMeters"))
+                accuracy = _safe_float(raw_row.get("AccuracyMeters"))
+                first_seen = str(raw_row.get("FirstSeen") or "").strip()
+                network_type = str(raw_row.get("Type") or "").strip() or "WIFI"
+                if bssid:
+                    unique_bssids.add(bssid)
+                if ssid:
+                    unique_ssids.add(ssid)
+                auth_counts[auth_mode] = auth_counts.get(auth_mode, 0) + 1
+                channel_counts[channel_text] = channel_counts.get(channel_text, 0) + 1
+                signal_bucket = _wardriving_signal_bucket(signal)
+                signal_counts[signal_bucket] = signal_counts.get(signal_bucket, 0) + 1
+                if signal is not None:
+                    signal_values.append(signal)
+                if first_seen:
+                    first_seen_values.append(first_seen)
+
+                row = {
+                    "row": index,
+                    "bssid": bssid,
+                    "ssid": ssid or "<hidden>",
+                    "auth_mode": auth_mode,
+                    "auth_mode_raw": auth_mode_raw,
+                    "channel": channel_text,
+                    "rssi": signal,
+                    "signal_quality": signal_bucket,
+                    "lat": lat,
+                    "lng": lng,
+                    "altitude_m": altitude,
+                    "accuracy_m": accuracy,
+                    "first_seen": first_seen,
+                    "type": network_type,
+                    "has_coordinates": lat is not None and lng is not None,
+                    "uploaded": uploaded,
+                }
+                rows.append(row)
+                if row["has_coordinates"]:
+                    points.append({
+                        "lat": lat,
+                        "lng": lng,
+                        "ssid": row["ssid"],
+                        "bssid": bssid,
+                        "auth_mode": auth_mode,
+                        "rssi": signal,
+                        "channel": channel_text,
+                    })
+
+            rows.sort(key=lambda item: ((item.get("rssi") is None), -(item.get("rssi") or -200), item.get("ssid") or ""))
+            top_channels = [
+                {"channel": key, "count": count}
+                for key, count in sorted(channel_counts.items(), key=lambda item: (-item[1], item[0]))[:8]
+            ]
+            auth_distribution = [
+                {"auth_mode": key, "count": count}
+                for key, count in sorted(auth_counts.items(), key=lambda item: (-item[1], item[0]))
+            ]
+            signal_distribution = [
+                {"label": key, "count": count}
+                for key, count in sorted(signal_counts.items(), key=lambda item: (-item[1], item[0]))
+            ]
+            stats = {
+                "networks": len(rows),
+                "unique_bssids": len(unique_bssids),
+                "unique_ssids": len(unique_ssids),
+                "with_coordinates": len(points),
+                "uploaded": uploaded,
+                "strongest_signal": max(signal_values) if signal_values else None,
+                "weakest_signal": min(signal_values) if signal_values else None,
+                "average_signal": round(sum(signal_values) / len(signal_values), 1) if signal_values else None,
+                "first_seen": min(first_seen_values) if first_seen_values else "",
+                "last_seen": max(first_seen_values) if first_seen_values else "",
+            }
+            stat_result = path.stat()
+            return {
+                "file": {
+                    "name": path.name,
+                    "size": stat_result.st_size,
+                    "mtime": int(stat_result.st_mtime),
+                },
+                "stats": stats,
+                "auth_distribution": auth_distribution,
+                "channel_distribution": top_channels,
+                "signal_distribution": signal_distribution,
+                "map": {
+                    "has_coordinates": bool(points),
+                    "point_count": len(points),
+                    "bounds": _compute_bounds(points),
+                    "points": points[:500],
+                    "truncated": len(points) > 500,
+                },
+                "rows": rows[:500],
+                "rows_truncated": len(rows) > 500,
+                "meta": {
+                    "wigle_header": meta_row,
+                    "columns": columns,
+                },
+            }
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Failed to parse wardriving CSV: {exc}") from exc
 
 
 def _is_valid_discord_webhook(url: str) -> bool:
@@ -935,6 +1155,9 @@ class RaspyJackHandler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/loot/nmap":
                 self._handle_loot_nmap(query)
                 return
+            if parsed.path == "/api/loot/wardriving":
+                self._handle_loot_wardriving(query)
+                return
             if parsed.path == "/api/system/status":
                 self._handle_system_status()
                 return
@@ -1457,6 +1680,32 @@ class RaspyJackHandler(SimpleHTTPRequestHandler):
         include_raw = str(query.get("include_raw", [""])[0]).strip().lower() in {"1", "true", "yes", "on"}
         try:
             payload = parse_nmap_xml_file(target, include_raw_xml=include_raw)
+            payload.setdefault("file", {})["loot_path"] = raw
+            _json_response(self, payload)
+        except ValueError as exc:
+            _json_response(self, {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        except Exception as exc:
+            _json_response(self, {"error": f"parse error: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _handle_loot_wardriving(self, query: dict) -> None:
+        raw = unquote(query.get("path", [""])[0])
+        target = _safe_loot_path(raw)
+        if target is None or not target.exists() or not target.is_file():
+            _json_response(self, {"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        try:
+            rel_path = str(target.relative_to(LOOT_DIR)).replace("\\", "/")
+        except Exception:
+            rel_path = ""
+        if rel_path != "wardriving" and not rel_path.startswith("wardriving/"):
+            _json_response(self, {"error": "not a wardriving csv"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if target.suffix.lower() != ".csv":
+            _json_response(self, {"error": "not csv"}, status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
+            return
+
+        try:
+            payload = parse_wardriving_csv_file(target)
             payload.setdefault("file", {})["loot_path"] = raw
             _json_response(self, payload)
         except ValueError as exc:
