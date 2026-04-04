@@ -380,6 +380,7 @@ main > .flex.items-center.justify-between.mb-4.md\:mb-6 {
 
 .wardriving-auth-menu {
   max-height: 18rem;
+  overflow: hidden auto;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
@@ -419,6 +420,7 @@ main > .flex.items-center.justify-between.mb-4.md\:mb-6 {
   font-size: 0.75rem;
   border: 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0 !important;
   text-align: left;
 }
 
